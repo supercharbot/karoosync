@@ -29,6 +29,7 @@ const App = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const password = urlParams.get('password');
     const userLogin = urlParams.get('user_login');
+    const siteUrl = urlParams.get('site_url');
     const error = urlParams.get('error');
 
     if (error) {
@@ -37,20 +38,21 @@ const App = () => {
       return;
     }
 
-    if (password && userLogin) {
-      handleOAuthReturn(password, userLogin);
+    if (password && userLogin && siteUrl) {
+      handleOAuthReturn(password, userLogin, siteUrl);
     }
   }, []);
 
-  const handleOAuthReturn = async (password, userLogin) => {
+  const handleOAuthReturn = async (password, userLogin, siteUrl) => {
     setCurrentView('syncing');
     setSyncStatus('syncing');
     setSyncProgress(20);
     setSyncDetails('Processing WordPress authorization...');
 
     try {
+      // Use the site_url from callback, not formData.url
       const authCredentials = {
-        url: formData.url,
+        url: decodeURIComponent(siteUrl), // Decode the URL-encoded site_url
         authMethod: 'application',
         username: userLogin,
         appPassword: password
