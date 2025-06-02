@@ -1,8 +1,7 @@
-// api.js with WordPress Application Password authorization flow
 const API_ENDPOINT = process.env.REACT_APP_API_ENDPOINT || 'https://tmaob4c6n9.execute-api.ap-southeast-2.amazonaws.com/v1/sync';
 const OAUTH_REDIRECT_URI = process.env.REACT_APP_REDIRECT_URI || 
   (window.location.hostname === 'localhost' 
-    ? 'https://your-domain.com/oauth/callback' // Replace with your actual HTTPS domain
+    ? 'https://your-domain.com/oauth/callback'
     : `${window.location.origin}/oauth/callback`);
 
 const handleApiResponse = async (response) => {
@@ -73,7 +72,7 @@ export const initializeAppPasswordAuth = async (storeUrl) => {
   }
 };
 
-export const syncStore = async (credentials) => {
+export const syncStore = async (credentials, authToken = null) => {
   try {
     let url = credentials.url;
     if (url && !url.startsWith('http')) {
@@ -83,9 +82,14 @@ export const syncStore = async (credentials) => {
     
     console.log(`Connecting to: ${url}`);
     
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
     const response = await fetch(API_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(credentials)
     });
     
@@ -121,7 +125,7 @@ export const syncStore = async (credentials) => {
   }
 };
 
-export const updateProduct = async (credentials, productId, productData) => {
+export const updateProduct = async (credentials, productId, productData, authToken = null) => {
   try {
     let url = credentials.url;
     if (url && !url.startsWith('http')) {
@@ -142,9 +146,14 @@ export const updateProduct = async (credentials, productId, productData) => {
       })
     };
 
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const response = await fetch(API_ENDPOINT, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         ...credentials,
         action: 'updateProduct',

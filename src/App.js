@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Store, AlertTriangle, CheckCircle, Info, ExternalLink } from 'lucide-react';
+import { Loader2, Store, AlertTriangle, CheckCircle, Info, ExternalLink, LogOut } from 'lucide-react';
 import ProductEditor from './ProductEditor';
 import { syncStore, updateProduct, initializeAppPasswordAuth } from './api';
+import { useAuth } from './AuthContext';
 import ConnectionDiagnostic from './ConnectionDiagnostic';
 
 const App = () => {
+  const { getAuthToken, user, logout } = useAuth();
   const [currentView, setCurrentView] = useState('form');
   const [authMethod, setAuthMethod] = useState('woocommerce');
   const [formData, setFormData] = useState({
@@ -24,12 +26,10 @@ const App = () => {
   const [syncDetails, setSyncDetails] = useState('');
   const [lastError, setLastError] = useState(null);
 
-  // Handle OAuth callback
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const password = urlParams.get('password');
     const userLogin = urlParams.get('user_login');
-    const siteUrl = urlParams.get('site_url');
     const error = urlParams.get('error');
 
     if (error) {
@@ -38,21 +38,20 @@ const App = () => {
       return;
     }
 
-    if (password && userLogin && siteUrl) {
-      handleOAuthReturn(password, userLogin, siteUrl);
+    if (password && userLogin) {
+      handleOAuthReturn(password, userLogin);
     }
   }, []);
 
-  const handleOAuthReturn = async (password, userLogin, siteUrl) => {
+  const handleOAuthReturn = async (password, userLogin) => {
     setCurrentView('syncing');
     setSyncStatus('syncing');
     setSyncProgress(20);
     setSyncDetails('Processing WordPress authorization...');
 
     try {
-      // Use the site_url from callback, not formData.url
       const authCredentials = {
-        url: decodeURIComponent(siteUrl), // Decode the URL-encoded site_url
+        url: formData.url,
         authMethod: 'application',
         username: userLogin,
         appPassword: password
@@ -62,7 +61,8 @@ const App = () => {
       setSyncDetails('Authorization complete! Connecting to store...');
       setSyncProgress(50);
       
-      const result = await syncStore(authCredentials);
+      const authToken = await getAuthToken();
+      const result = await syncStore(authCredentials, authToken);
       
       if (result.success) {
         setSyncDetails('Data received! Processing products...');
@@ -167,8 +167,9 @@ const App = () => {
       setSyncDetails('Authenticating and fetching store data...');
       setSyncProgress(30);
       
+      const authToken = await getAuthToken();
       const syncStartTime = Date.now();
-      const result = await syncStore(creds);
+      const result = await syncStore(creds, authToken);
       
       const timeTaken = Date.now() - syncStartTime;
       if (timeTaken < 1500) {
@@ -214,7 +215,8 @@ const App = () => {
 
   const handleProductUpdate = async (productId, updatedData) => {
     try {
-      const result = await updateProduct(credentials, productId, updatedData);
+      const authToken = await getAuthToken();
+      const result = await updateProduct(credentials, productId, updatedData, authToken);
       
       if (result.success) {
         setSyncData(prev => ({
@@ -262,6 +264,17 @@ const App = () => {
               </div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Karoosync</h1>
               <p className="text-gray-600">WooCommerce Product Editor</p>
+              
+              <div className="flex items-center justify-center mt-4 text-sm text-gray-500">
+                <span>Logged in as {user?.username}</span>
+                <button
+                  onClick={logout}
+                  className="ml-2 text-red-600 hover:text-red-800 flex items-center"
+                >
+                  <LogOut className="w-4 h-4 mr-1" />
+                  Sign Out
+                </button>
+              </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow-xl p-8">
