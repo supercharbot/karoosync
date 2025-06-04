@@ -37,6 +37,39 @@ const generateUUID = () => {
   });
 };
 
+export const checkUserData = async (authToken) => {
+  try {
+    console.log('Checking for user data...');
+    
+    const headers = { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}` 
+    };
+    
+    const response = await fetch(`${API_ENDPOINT}?action=check-data`, {
+      method: 'GET',
+      headers
+    });
+    
+    const result = await handleApiResponse(response);
+    
+    if (result.success) {
+      console.log(result.hasData ? 
+        `Found user data: ${result.productCount} products (${result.cacheAgeHours}h old)` : 
+        'No user data found'
+      );
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Failed to check user data:', error);
+    return { 
+      success: false, 
+      error: error.message 
+    };
+  }
+};
+
 export const initializeAppPasswordAuth = async (storeUrl) => {
   try {
     let url = storeUrl;

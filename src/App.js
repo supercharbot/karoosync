@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, Store, AlertTriangle, CheckCircle, Info, ExternalLink, LogOut } from 'lucide-react';
 import ProductEditor from './ProductEditor';
-import { syncStore, updateProduct, initializeAppPasswordAuth } from './api';
+import { syncStore, updateProduct, initializeAppPasswordAuth, checkUserData } from './api';
 import { useAuth } from './AuthContext';
 import ConnectionDiagnostic from './ConnectionDiagnostic';
 
 const App = () => {
   const { getAuthToken, user, logout } = useAuth();
-  const [currentView, setCurrentView] = useState('form');
+  const [currentView, setCurrentView] = useState('checking-data');
   const [authMethod, setAuthMethod] = useState('woocommerce');
   const [formData, setFormData] = useState({
     url: '',
@@ -25,6 +25,9 @@ const App = () => {
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncDetails, setSyncDetails] = useState('');
   const [lastError, setLastError] = useState(null);
+  const [checkingData, setCheckingData] = useState(false);
+  const [hasExistingData, setHasExistingData] = useState(false);
+  const [dataCheckComplete, setDataCheckComplete] = useState(false);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -42,6 +45,66 @@ const App = () => {
       handleOAuthReturn(password, userLogin);
     }
   }, []);
+
+  useEffect(() => {
+    const checkForExistingData = async () => {
+      if (user && !dataCheckComplete) {
+        console.log('=== Starting data check for user ===');
+        setCheckingData(true);
+        setCurrentView('checking-data');
+        
+        try {
+          const authToken = await getAuthToken();
+          console.log('Got auth token, calling checkUserData...');
+          
+          const result = await checkUserData(authToken);
+          console.log('Data check result:', result);
+          
+          if (result.success && result.hasData) {
+            console.log('User has data, loading editor...');
+            setSyncData(result.data);
+            setHasExistingData(true);
+            setCurrentView('editor');
+          } else if (result.success && !result.hasData) {
+            console.log('User has no data, showing sync form...');
+            setHasExistingData(false);
+            setCurrentView('form');
+          } else {
+            console.log('Data check failed, showing sync form...');
+            setError(result.error || 'Could not check for existing data');
+            setHasExistingData(false);
+            setCurrentView('form');
+          }
+        } catch (error) {
+          console.error('Error in data check:', error);
+          setError('Could not check for existing data: ' + error.message);
+          setHasExistingData(false);
+          setCurrentView('form');
+        } finally {
+          setCheckingData(false);
+          setDataCheckComplete(true);
+          console.log('=== Data check complete ===');
+        }
+      }
+    };
+
+    checkForExistingData();
+  }, [user, getAuthToken, dataCheckComplete]);
+
+  // Failsafe timeout - prevent infinite checking
+  useEffect(() => {
+    if (currentView === 'checking-data') {
+      const timeout = setTimeout(() => {
+        console.log('=== TIMEOUT: Forcing redirect to form ===');
+        setCheckingData(false);
+        setDataCheckComplete(true);
+        setCurrentView('form');
+        setError('Data check timed out. Please try connecting your store.');
+      }, 10000); // 10 second timeout
+
+      return () => clearTimeout(timeout);
+    }
+  }, [currentView]);
 
   const handleOAuthReturn = async (password, userLogin) => {
     setCurrentView('syncing');
@@ -164,7 +227,7 @@ const App = () => {
       
       setCredentials(creds);
       
-      setSyncDetails('Authenticating and fetching store data...');
+      setSyncDetails('Syncing fresh data from WooCommerce...');
       setSyncProgress(30);
       
       const authToken = await getAuthToken();
@@ -177,15 +240,12 @@ const App = () => {
       }
       
       if (result.success) {
-        setSyncDetails('Data received! Processing products...');
-        setSyncProgress(80);
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
+        setSyncDetails('Data synced and saved!');
+        setSyncProgress(100);
+        setSyncStatus('complete');
         
         setSyncData(result.data);
-        setSyncProgress(100);
-        setSyncDetails('Sync complete!');
-        setSyncStatus('complete');
+        setHasExistingData(true);
         
         await new Promise(resolve => setTimeout(resolve, 800));
         setCurrentView('editor');
@@ -210,6 +270,42 @@ const App = () => {
       } else {
         setCurrentView('form');
       }
+    }
+  };
+
+  const handleResync = async () => {
+    if (!credentials) {
+      setError('No store credentials found');
+      return;
+    }
+
+    setSyncStatus('syncing');
+    setCurrentView('syncing');
+    setSyncProgress(0);
+    setSyncDetails('Re-syncing your store data...');
+
+    try {
+      const authToken = await getAuthToken();
+      const result = await syncStore(credentials, authToken);
+      
+      if (result.success) {
+        setSyncDetails('Store data refreshed!');
+        setSyncProgress(100);
+        setSyncStatus('complete');
+        
+        setSyncData(result.data);
+        
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setCurrentView('editor');
+      } else {
+        throw new Error(result.error || 'Re-sync failed');
+      }
+    } catch (err) {
+      setSyncStatus('error');
+      setError(err.message);
+      setSyncProgress(0);
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setCurrentView('editor');
     }
   };
 
@@ -251,7 +347,40 @@ const App = () => {
     setLastError(null);
     setShowAuthFlow(false);
     setAuthUrl('');
+    setHasExistingData(false);
+    setDataCheckComplete(false);
+    setCheckingData(false);
   };
+
+  if (currentView === 'checking-data' || checkingData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <div className="text-center max-w-md w-full p-6">
+          <div className="mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full">
+              <Loader2 className="w-10 h-10 text-white animate-spin" />
+            </div>
+          </div>
+          
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Checking Your Data
+          </h2>
+          
+          <p className="text-gray-600 mb-6">
+            Looking for your store data...
+          </p>
+          
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full animate-pulse w-3/4"></div>
+          </div>
+          
+          <p className="text-xs text-gray-500 mt-4">
+            This should only take a few seconds
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (currentView === 'form') {
     return (
@@ -262,7 +391,10 @@ const App = () => {
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-4">
                 <Store className="w-8 h-8 text-white" />
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Karoosync</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Connect Your Store</h1>
+              {dataCheckComplete && !hasExistingData && (
+                <p className="text-gray-600 mb-2">No store data found. Let's connect your WooCommerce store!</p>
+              )}
               <p className="text-gray-600">WooCommerce Product Editor</p>
               
               <div className="flex items-center justify-center mt-4 text-sm text-gray-500">
@@ -493,6 +625,7 @@ const App = () => {
       credentials={credentials}
       onProductUpdate={handleProductUpdate}
       onReset={resetForm}
+      onResync={handleResync}
     />;
   }
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { X, Upload, Plus, ChevronLeft, ChevronRight, Image, ArrowLeft, RefreshCw } from 'lucide-react';
 
-const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onReset }) => {
+const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onReset, onResync }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -38,7 +38,6 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
   const handleImageDelete = (index) => {
     setEditingProduct(prev => {
       const newImages = prev.images.filter((_, i) => i !== index);
-      // If we're deleting the active image, adjust active index
       if (activeImageIndex >= index && activeImageIndex > 0) {
         setActiveImageIndex(activeImageIndex - 1);
       } else if (newImages.length === 0) {
@@ -71,7 +70,6 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
     setIsUploading(true);
     setUploadProgress(0);
     
-    // Simulate progress for user feedback
     const progressInterval = setInterval(() => {
       setUploadProgress(prev => {
         const newProgress = prev + 10;
@@ -80,14 +78,11 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
     }, 200);
     
     try {
-      // Process each file
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // Check file size - warn for large files
         const MAX_RECOMMENDED_SIZE = 2 * 1024 * 1024; // 2MB
         if (file.size > MAX_RECOMMENDED_SIZE) {
-          // This might still work but could cause issues with some WooCommerce setups
           console.warn(`File ${file.name} is ${(file.size/1024/1024).toFixed(1)}MB which exceeds the recommended size of 2MB`);
           setPublishStatus(`Warning: Large image may cause upload issues (${(file.size/1024/1024).toFixed(1)}MB)`);
         }
@@ -127,7 +122,6 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
       }, 500);
     }
     
-    // Clear the file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -140,7 +134,6 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
     setPublishStatus('Publishing changes...');
     
     try {
-      // Validate required fields
       if (!editingProduct.name) {
         throw new Error('Product name is required');
       }
@@ -153,11 +146,10 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
       
       if (result.success) {
         setPublishStatus('Published successfully!');
-        // Update selected product with new data
         const updatedProduct = result.data;
         if (updatedProduct) {
           setSelectedProduct(updatedProduct);
-          handleProductSelect(updatedProduct); // Refresh the editor with new data
+          handleProductSelect(updatedProduct);
         }
       } else {
         setPublishStatus(`Error: ${result.error}`);
@@ -169,7 +161,6 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
     setIsPublishing(false);
   };
 
-  // Helper to navigate images
   const navigateImage = (direction) => {
     if (!editingProduct?.images?.length) return;
     
@@ -209,6 +200,19 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                 {publishStatus}
               </span>
             )}
+            
+            <button
+              onClick={() => {
+                if (window.confirm('This will fetch fresh data from your WooCommerce store. Continue?')) {
+                  onResync();
+                }
+              }}
+              className="px-4 py-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors flex items-center"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Re-sync Store
+            </button>
+
             <button
               onClick={handlePublish}
               disabled={!selectedProduct || isPublishing}
