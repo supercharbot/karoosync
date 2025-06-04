@@ -62,7 +62,27 @@ const App = () => {
           
           if (result.success && result.hasData) {
             console.log('User has data, loading editor...');
-            setSyncData(result.data);
+            
+            // Handle different data structures
+            if (result.structure === 'categorized') {
+              // For categorized data, flatten the metadata structure
+              setSyncData({
+                structure: 'categorized',
+                categories: result.metadata.categories,
+                attributes: result.metadata.attributes,
+                systemStatus: result.metadata.systemStatus,
+                totalProducts: result.totalProducts,
+                products: [], // Empty array for compatibility
+                availableCategories: result.availableCategories
+              });
+            } else if (result.structure === 'legacy') {
+              // For legacy data, use the data property
+              setSyncData(result.data);
+            } else {
+              // Fallback for any other structure
+              setSyncData(result.data || result);
+            }
+            
             setHasExistingData(true);
             setCurrentView('editor');
           } else if (result.success && !result.hasData) {

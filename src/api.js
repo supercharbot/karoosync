@@ -54,15 +54,48 @@ export const checkUserData = async (authToken) => {
     const result = await handleApiResponse(response);
     
     if (result.success) {
-      console.log(result.hasData ? 
-        `Found user data: ${result.productCount} products (${result.cacheAgeHours}h old)` : 
-        'No user data found'
-      );
+      if (result.structure === 'categorized') {
+        console.log(`Found categorized data: ${result.totalProducts} products in ${result.availableCategories?.length || 0} categories (${result.cacheAgeHours}h old)`);
+      } else if (result.structure === 'legacy') {
+        console.log(`Found legacy data: ${result.productCount} products (needs migration) (${result.cacheAgeHours}h old)`);
+      } else {
+        console.log('No user data found');
+      }
     }
     
     return result;
   } catch (error) {
     console.error('Failed to check user data:', error);
+    return { 
+      success: false, 
+      error: error.message 
+    };
+  }
+};
+
+export const loadCategoryProducts = async (categoryKey, authToken) => {
+  try {
+    console.log(`Loading products for category: ${categoryKey}`);
+    
+    const headers = { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}` 
+    };
+    
+    const response = await fetch(`${API_ENDPOINT}?action=load-category&category=${encodeURIComponent(categoryKey)}`, {
+      method: 'GET',
+      headers
+    });
+    
+    const result = await handleApiResponse(response);
+    
+    if (result.success) {
+      console.log(`Loaded ${result.products?.length || 0} products from category ${categoryKey}`);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error(`Failed to load category ${categoryKey}:`, error);
     return { 
       success: false, 
       error: error.message 
@@ -128,11 +161,33 @@ export const syncStore = async (credentials, authToken = null) => {
     
     const result = await handleApiResponse(response);
     
-    if (result.success && (!result.data.products || result.data.products.length === 0)) {
-      return { 
-        success: false, 
-        error: 'No products found in the store or API key has insufficient permissions.'
-      };
+    if (result.success) {
+      // Handle new categorized structure
+      if (result.structure === 'categorized') {
+        console.log(`Sync complete: ${result.metadata?.totalProducts || 0} products organized into ${result.categoriesStored || 0} categories`);
+        
+        // FIXED: Add empty products array for compatibility with existing ProductEditor
+        return {
+          success: true,
+          data: {
+            products: [], // This prevents the crash - empty array for compatibility
+            categories: result.metadata?.categories || [],
+            attributes: result.metadata?.attributes || [],
+            systemStatus: result.metadata?.systemStatus,
+            totalProducts: result.metadata?.totalProducts || 0,
+            structure: 'categorized',
+            availableCategories: result.metadata?.categories?.map(cat => `category-${cat.id}`) || []
+          }
+        };
+      }
+      
+      // Handle legacy structure for backward compatibility
+      if (result.data && (!result.data.products || result.data.products.length === 0)) {
+        return { 
+          success: false, 
+          error: 'No products found in the store or API key has insufficient permissions.'
+        };
+      }
     }
     
     return result;
@@ -158,7 +213,7 @@ export const syncStore = async (credentials, authToken = null) => {
   }
 };
 
-export const updateProduct = async (credentials, productId, productData, authToken = null) => {
+export const updateProduct = async (credentials, productId, updatedData, authToken = null) => {
   try {
     let url = credentials.url;
     if (url && !url.startsWith('http')) {
@@ -167,8 +222,8 @@ export const updateProduct = async (credentials, productId, productData, authTok
     }
     
     const processedProductData = {
-      ...productData,
-      images: productData.images.map(image => {
+      ...updatedData,
+      images: updatedData.images.map(image => {
         if (image.src && image.src.startsWith('data:image')) {
           return { 
             ...image,
