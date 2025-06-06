@@ -63,9 +63,28 @@ const App = () => {
           if (result.success && result.hasData) {
             console.log('User has data, loading editor...');
             
+            // Set credentials if available
+            if (result.credentials) {
+              setCredentials(result.credentials);
+              console.log('Credentials loaded from storage');
+              
+              // Set form data for potential re-sync
+              setFormData({
+                url: result.credentials.url || '',
+                consumerKey: result.credentials.consumerKey || '',
+                consumerSecret: result.credentials.consumerSecret || '',
+                username: result.credentials.username || '',
+                appPassword: result.credentials.appPassword || ''
+              });
+              setAuthMethod(result.credentials.authMethod || 'woocommerce');
+            } else {
+              console.warn('No credentials found - user will need to re-sync for updates');
+              setCredentials(null);
+            }
+            
             // Handle different data structures
             if (result.structure === 'categorized') {
-              // For categorized data, flatten the metadata structure
+              // For categorized data, set up the structure
               setSyncData({
                 structure: 'categorized',
                 categories: result.metadata.categories,
@@ -332,15 +351,30 @@ const App = () => {
   const handleProductUpdate = async (productId, updatedData) => {
     try {
       const authToken = await getAuthToken();
-      const result = await updateProduct(credentials, productId, updatedData, authToken);
+      
+      // Use stored credentials if available, otherwise pass current credentials
+      const updateCredentials = credentials || {
+        url: formData.url,
+        authMethod: authMethod,
+        consumerKey: formData.consumerKey,
+        consumerSecret: formData.consumerSecret,
+        username: formData.username,
+        appPassword: formData.appPassword
+      };
+      
+      const result = await updateProduct(updateCredentials, productId, updatedData, authToken);
       
       if (result.success) {
-        setSyncData(prev => ({
-          ...prev,
-          products: prev.products.map(p => 
-            p.id === productId ? result.data : p
-          )
-        }));
+        // Update sync data if it exists and is in legacy format
+        if (syncData && syncData.products) {
+          setSyncData(prev => ({
+            ...prev,
+            products: prev.products.map(p => 
+              p.id === productId ? result.data : p
+            )
+          }));
+        }
+        
         return { success: true, data: result.data };
       }
       
@@ -411,9 +445,14 @@ const App = () => {
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-4">
                 <Store className="w-8 h-8 text-white" />
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Connect Your Store</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                {hasExistingData ? 'Update Store Connection' : 'Connect Your Store'}
+              </h1>
               {dataCheckComplete && !hasExistingData && (
                 <p className="text-gray-600 mb-2">No store data found. Let's connect your WooCommerce store!</p>
+              )}
+              {hasExistingData && (
+                <p className="text-gray-600 mb-2">Update your store credentials or sync fresh data</p>
               )}
               <p className="text-gray-600">WooCommerce Product Editor</p>
               
@@ -566,7 +605,7 @@ const App = () => {
                     onClick={handleSubmit}
                     className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold py-3 px-6 rounded-xl hover:from-blue-600 hover:to-purple-700 transform hover:scale-105 transition duration-200 shadow-lg hover:shadow-xl"
                   >
-                    Connect to Store
+                    {hasExistingData ? 'Update & Sync Store' : 'Connect to Store'}
                   </button>
                 )}
               </div>

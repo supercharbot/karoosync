@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, Plus, ChevronLeft, ChevronRight, Image, ArrowLeft, RefreshCw, Store, Folder, Package, Loader2 } from 'lucide-react';
+import { X, Upload, Plus, ChevronLeft, ChevronRight, Image, ArrowLeft, RefreshCw, Store, Folder, Package, Loader2, AlertTriangle } from 'lucide-react';
 import { loadCategoryProducts } from './api';
 import { useAuth } from './AuthContext';
 
@@ -21,6 +21,11 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
+
+  // Check if credentials are available
+  const hasCredentials = credentials && credentials.url && 
+    ((credentials.authMethod === 'woocommerce' && credentials.consumerKey && credentials.consumerSecret) ||
+     (credentials.authMethod === 'application' && credentials.username && credentials.appPassword));
 
   // Handle category selection and load products
   const handleCategorySelect = async (category) => {
@@ -170,6 +175,12 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
   const handlePublish = async () => {
     if (!selectedProduct || !editingProduct) return;
     
+    // Check if credentials are available
+    if (!hasCredentials) {
+      setPublishStatus('Error: Store credentials expired. Please re-sync your store to enable updates.');
+      return;
+    }
+    
     setIsPublishing(true);
     setPublishStatus('Publishing changes...');
     
@@ -185,15 +196,41 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
       const result = await onProductUpdate(selectedProduct.id, editingProduct);
       
       if (result.success) {
-        setPublishStatus('Published successfully!');
+        // Check if S3 sync succeeded and show appropriate message
+        if (result.data && result.s3Updated === false) {
+          setPublishStatus(`Published to WooCommerce (${result.categoriesUpdated || 0} cache categories updated)`);
+        } else if (result.data && result.s3Updated === true) {
+          setPublishStatus(`Published successfully (${result.categoriesUpdated || 0} categories updated)!`);
+        } else {
+          setPublishStatus('Published successfully!');
+        }
+        
+        // Extract the actual product data
         const updatedProduct = result.data;
         if (updatedProduct) {
           setSelectedProduct(updatedProduct);
+          
           // Update the product in the category list
           setCategoryProducts(prev => 
             prev.map(p => p.id === selectedProduct.id ? updatedProduct : p)
           );
+          
+          // Update the editing product with fresh data
+          setEditingProduct({
+            name: updatedProduct.name,
+            description: updatedProduct.description,
+            short_description: updatedProduct.short_description,
+            regular_price: updatedProduct.regular_price,
+            sale_price: updatedProduct.sale_price,
+            sku: updatedProduct.sku,
+            stock_quantity: updatedProduct.stock_quantity,
+            stock_status: updatedProduct.stock_status,
+            images: updatedProduct.images || []
+          });
         }
+        
+        // Clear status after 5 seconds for longer messages
+        setTimeout(() => setPublishStatus(''), 5000);
       } else {
         setPublishStatus(`Error: ${result.error}`);
       }
@@ -240,11 +277,26 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
               )}
             </div>
             <div className="flex items-center gap-4">
+              {/* Credentials warning */}
+              {!hasCredentials && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2">
+                  <div className="flex items-center">
+                    <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2" />
+                    <span className="text-yellow-800 text-sm font-medium">
+                      Updates disabled - credentials expired
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Publish status */}
               {publishStatus && (
                 <span 
                   className={`text-sm px-4 py-2 rounded-full ${
                     publishStatus.includes('Error') 
                       ? 'bg-red-50 text-red-600' 
+                      : publishStatus.includes('Warning')
+                      ? 'bg-yellow-50 text-yellow-600'
                       : 'bg-green-50 text-green-600'
                   }`}
                 >
@@ -267,12 +319,13 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
               {currentView === 'editor' && (
                 <button
                   onClick={handlePublish}
-                  disabled={!selectedProduct || isPublishing}
+                  disabled={!selectedProduct || isPublishing || !hasCredentials}
                   className={`px-6 py-2 rounded-lg font-medium transition-all ${
-                    selectedProduct && !isPublishing
+                    selectedProduct && !isPublishing && hasCredentials
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg transform hover:translate-y-[-1px]'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
+                  title={!hasCredentials ? 'Please re-sync your store to enable updates' : ''}
                 >
                   {isPublishing ? (
                     <span className="flex items-center">
@@ -354,7 +407,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
             </div>
           )}
 
-          {/* Products View (same as original) */}
+          {/* Products View */}
           {currentView === 'products' && (
             <div className="p-6 w-full">
               <div className="max-w-7xl mx-auto">
@@ -378,9 +431,9 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-                    {categoryProducts.map((product) => (
+                    {categoryProducts.map((product, index) => (
                       <div
-                        key={product.id}
+                        key={`${selectedCategory?.id}-${product.id}-${index}`}
                         onClick={() => handleProductSelect(product)}
                         className="group bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-all hover:translate-y-[-2px]"
                       >
@@ -425,7 +478,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
             </div>
           )}
 
-          {/* Product Editor (exactly same as original) */}
+          {/* Product Editor */}
           {currentView === 'editor' && selectedProduct && editingProduct && (
             <>
               {/* Left Side - Product Preview */}
@@ -546,11 +599,26 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                 </div>
               </div>
 
-              {/* Right Side - Editor (exactly same as original) */}
+              {/* Right Side - Editor */}
               <div className="w-full md:w-1/2 bg-gray-50 overflow-auto">
                 <div className="p-6">
                   <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                     <h2 className="text-xl font-semibold text-gray-900 mb-6">Edit Product</h2>
+                    
+                    {/* Credentials warning in editor */}
+                    {!hasCredentials && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                        <div className="flex items-start">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-yellow-800 font-medium text-sm">Updates Disabled</p>
+                            <p className="text-yellow-700 text-sm mt-1">
+                              Your store credentials have expired. Please re-sync your store to enable product updates.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="space-y-6">
                       {/* Product Name */}
@@ -563,6 +631,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                           value={editingProduct?.name || ''}
                           onChange={(e) => handleFieldChange('name', e.target.value)}
                           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          disabled={!hasCredentials}
                         />
                       </div>
 
@@ -577,6 +646,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                             value={editingProduct?.regular_price || ''}
                             onChange={(e) => handleFieldChange('regular_price', e.target.value)}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            disabled={!hasCredentials}
                           />
                         </div>
                         <div>
@@ -589,6 +659,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                             onChange={(e) => handleFieldChange('sale_price', e.target.value)}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="Leave empty for no sale price"
+                            disabled={!hasCredentials}
                           />
                         </div>
                       </div>
@@ -604,6 +675,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                             value={editingProduct?.sku || ''}
                             onChange={(e) => handleFieldChange('sku', e.target.value)}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            disabled={!hasCredentials}
                           />
                         </div>
                         <div>
@@ -614,6 +686,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                             value={editingProduct?.stock_status || 'instock'}
                             onChange={(e) => handleFieldChange('stock_status', e.target.value)}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
+                            disabled={!hasCredentials}
                           >
                             <option value="instock">In Stock</option>
                             <option value="outofstock">Out of Stock</option>
@@ -629,6 +702,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                             value={editingProduct?.stock_quantity || ''}
                             onChange={(e) => handleFieldChange('stock_quantity', e.target.value)}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            disabled={!hasCredentials}
                           />
                         </div>
                       </div>
@@ -644,6 +718,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                           rows={3}
                           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Brief product summary (displayed in product lists)"
+                          disabled={!hasCredentials}
                         />
                       </div>
 
@@ -657,6 +732,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                           rows={6}
                           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Detailed product description (HTML supported)"
+                          disabled={!hasCredentials}
                         />
                       </div>
 
@@ -676,10 +752,14 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                           <div className="flex gap-3">
                             <div className="flex-1">
                               <label className="block w-full cursor-pointer">
-                                <div className="px-4 py-3 border border-gray-300 border-dashed rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                                <div className={`px-4 py-3 border border-gray-300 border-dashed rounded-lg transition-colors ${
+                                  hasCredentials ? 'bg-gray-50 hover:bg-gray-100' : 'bg-gray-100'
+                                }`}>
                                   <div className="flex items-center justify-center gap-2">
-                                    <Upload className="w-5 h-5 text-gray-500" />
-                                    <span className="text-sm text-gray-700">Upload from device</span>
+                                    <Upload className={`w-5 h-5 ${hasCredentials ? 'text-gray-500' : 'text-gray-400'}`} />
+                                    <span className={`text-sm ${hasCredentials ? 'text-gray-700' : 'text-gray-500'}`}>
+                                      Upload from device
+                                    </span>
                                   </div>
                                 </div>
                                 <input 
@@ -688,7 +768,8 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                                   ref={fileInputRef}
                                   onChange={handleFileUpload}
                                   multiple
-                                  className="sr-only" 
+                                  className="sr-only"
+                                  disabled={!hasCredentials}
                                 />
                               </label>
                             </div>
@@ -699,22 +780,26 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                                   type="text"
                                   placeholder="Enter image URL"
                                   onKeyPress={(e) => {
-                                    if (e.key === 'Enter' && e.target.value) {
+                                    if (e.key === 'Enter' && e.target.value && hasCredentials) {
                                       handleImageAdd(e.target.value);
                                       e.target.value = '';
                                     }
                                   }}
                                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                                  disabled={!hasCredentials}
                                 />
                                 <button
                                   onClick={() => {
                                     const input = document.querySelector('input[placeholder="Enter image URL"]');
-                                    if (input?.value) {
+                                    if (input?.value && hasCredentials) {
                                       handleImageAdd(input.value);
                                       input.value = '';
                                     }
                                   }}
-                                  className="absolute right-2 top-1/2 transform -translate-y-1/2 w-7 h-7 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center hover:bg-blue-100 transition-colors"
+                                  disabled={!hasCredentials}
+                                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                                    hasCredentials ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-gray-100 text-gray-400'
+                                  }`}
                                 >
                                   <Plus className="w-4 h-4" />
                                 </button>
@@ -780,12 +865,14 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
                                 >
                                   <Image className="w-4 h-4" />
                                 </button>
-                                <button
-                                  onClick={() => handleImageDelete(index)}
-                                  className="w-8 h-8 bg-red-100 text-red-600 rounded-lg flex items-center justify-center hover:bg-red-200 transition-colors"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
+                                {hasCredentials && (
+                                  <button
+                                    onClick={() => handleImageDelete(index)}
+                                    className="w-8 h-8 bg-red-100 text-red-600 rounded-lg flex items-center justify-center hover:bg-red-200 transition-colors"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -810,7 +897,7 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
     );
   }
 
-  // Legacy structure (original ProductEditor code)
+  // Legacy structure fallback
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -825,6 +912,17 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
             )}
           </div>
           <div className="flex items-center gap-4">
+            {!hasCredentials && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2">
+                <div className="flex items-center">
+                  <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2" />
+                  <span className="text-yellow-800 text-sm font-medium">
+                    Updates disabled - credentials expired
+                  </span>
+                </div>
+              </div>
+            )}
+            
             {publishStatus && (
               <span 
                 className={`text-sm px-4 py-2 rounded-full ${
@@ -851,9 +949,9 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
 
             <button
               onClick={handlePublish}
-              disabled={!selectedProduct || isPublishing}
+              disabled={!selectedProduct || isPublishing || !hasCredentials}
               className={`px-6 py-2 rounded-lg font-medium transition-all ${
-                selectedProduct && !isPublishing
+                selectedProduct && !isPublishing && hasCredentials
                   ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg transform hover:translate-y-[-1px]'
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed'
               }`}
@@ -929,8 +1027,9 @@ const ProductEditor = ({ syncData, storeUrl, credentials, onProductUpdate, onRes
             </div>
           </div>
         ) : (
-          /* Legacy editor views - same as your original */
-          <div>Legacy editor would go here...</div>
+          <div className="text-center p-8">
+            <p className="text-gray-500">Legacy product editor would go here...</p>
+          </div>
         )}
       </div>
     </div>

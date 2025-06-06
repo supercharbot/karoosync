@@ -56,6 +56,11 @@ export const checkUserData = async (authToken) => {
     if (result.success) {
       if (result.structure === 'categorized') {
         console.log(`Found categorized data: ${result.totalProducts} products in ${result.availableCategories?.length || 0} categories (${result.cacheAgeHours}h old)`);
+        if (result.credentials) {
+          console.log('Stored credentials found for updates');
+        } else {
+          console.warn('No stored credentials - updates will be disabled');
+        }
       } else if (result.structure === 'legacy') {
         console.log(`Found legacy data: ${result.productCount} products (needs migration) (${result.cacheAgeHours}h old)`);
       } else {
@@ -166,11 +171,11 @@ export const syncStore = async (credentials, authToken = null) => {
       if (result.structure === 'categorized') {
         console.log(`Sync complete: ${result.metadata?.totalProducts || 0} products organized into ${result.categoriesStored || 0} categories`);
         
-        // FIXED: Add empty products array for compatibility with existing ProductEditor
+        // Return data structure that matches what App.js expects
         return {
           success: true,
           data: {
-            products: [], // This prevents the crash - empty array for compatibility
+            products: [], // Empty array for compatibility with existing ProductEditor
             categories: result.metadata?.categories || [],
             attributes: result.metadata?.attributes || [],
             systemStatus: result.metadata?.systemStatus,
@@ -215,11 +220,18 @@ export const syncStore = async (credentials, authToken = null) => {
 
 export const updateProduct = async (credentials, productId, updatedData, authToken = null) => {
   try {
+    // Handle case where credentials might be null (shouldn't happen, but safety first)
+    if (!credentials) {
+      throw new Error('No credentials available for product update. Please re-sync your store.');
+    }
+
     let url = credentials.url;
     if (url && !url.startsWith('http')) {
       url = `https://${url}`;
       credentials = { ...credentials, url };
     }
+    
+    console.log(`Updating product ${productId}...`);
     
     const processedProductData = {
       ...updatedData,
@@ -239,21 +251,46 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
+    const requestBody = {
+      ...credentials,
+      action: 'updateProduct',
+      productId,
+      productData: processedProductData
+    };
+
+    console.log('Sending update request to Lambda...');
+
     const response = await fetch(API_ENDPOINT, {
       method: 'PUT',
       headers,
-      body: JSON.stringify({
-        ...credentials,
-        action: 'updateProduct',
-        productId,
-        productData: processedProductData
-      })
+      body: JSON.stringify(requestBody)
     });
+
+    // Get response text first to debug what we're actually receiving
+    const responseText = await response.text();
+    console.log('Raw Lambda response:', responseText.substring(0, 500) + '...');
+    
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse Lambda response as JSON:', parseError);
+      throw new Error(`Server returned invalid response: ${responseText.substring(0, 100)}...`);
+    }
       
-    const result = await handleApiResponse(response);
-      
+    // Check if the response indicates success
     if (!result.success) {
-      throw new Error(result.error || 'Update failed');
+      const errorMessage = result.error || result.message || 'Update failed - no error details provided';
+      console.error('Lambda returned failure:', errorMessage);
+      throw new Error(errorMessage);
+    }
+    
+    // Log detailed success info
+    if (result.s3Updated === false) {
+      console.warn('Product updated in WooCommerce but S3 sync failed:', result.s3Error);
+      console.log(`Categories updated: ${result.categoriesUpdated || 0}`);
+    } else {
+      console.log(`Product updated successfully - WooCommerce ✅, S3 categories: ${result.categoriesUpdated || 0} ✅`);
     }
       
     return result;
@@ -262,10 +299,17 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
     
     let errorMessage = error.message;
     
-    if (errorMessage.includes('API key') && errorMessage.includes('write permissions')) {
+    // More specific error handling
+    if (errorMessage.includes('No stored credentials found')) {
+      errorMessage = 'Store credentials have expired. Please re-sync your store to enable updates.';
+    } else if (errorMessage.includes('API key') && errorMessage.includes('write permissions')) {
       errorMessage = 'Permission error: Your WooCommerce API key does not have write permissions. Please update your API key to have Read/Write access.';
     } else if (errorMessage.includes('HTML instead of JSON')) {
       errorMessage = 'Connection error: The store URL may be incorrect or the site is not responding with proper WooCommerce API data.';
+    } else if (errorMessage.includes('Failed to fetch')) {
+      errorMessage = 'Network error: Could not connect to the server. Please check your internet connection.';
+    } else if (errorMessage.includes('Server returned invalid response')) {
+      errorMessage = 'Server error: The server returned an invalid response. This may be a temporary issue.';
     }
     
     return { 
