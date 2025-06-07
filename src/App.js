@@ -24,10 +24,10 @@ const App = () => {
   const [syncStatus, setSyncStatus] = useState('idle');
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncDetails, setSyncDetails] = useState('');
+  const [lastError, setLastError] = useState(null);
   const [hasExistingData, setHasExistingData] = useState(false);
   const [dataCheckComplete, setDataCheckComplete] = useState(false);
 
-  // Handle OAuth return from WordPress
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const password = urlParams.get('password');
@@ -35,8 +35,7 @@ const App = () => {
     const error = urlParams.get('error');
 
     if (error) {
-      setError(`WordPress authorization error: ${error}`);
-      setCurrentView('form');
+      setError(`Authorization error: ${error}`);
       window.history.replaceState({}, document.title, window.location.pathname);
       return;
     }
@@ -61,11 +60,13 @@ const App = () => {
           console.log('Data check result:', result);
           
           if (result.success && result.hasData) {
-            console.log('User has existing data, loading editor...');
+            console.log('User has data, loading editor...');
             
             // Set credentials if available
             if (result.credentials) {
               setCredentials(result.credentials);
+              console.log('Credentials loaded from storage');
+              
               setFormData({
                 url: result.credentials.url || '',
                 consumerKey: result.credentials.consumerKey || '',
@@ -74,6 +75,9 @@ const App = () => {
                 appPassword: result.credentials.appPassword || ''
               });
               setAuthMethod(result.credentials.authMethod || 'woocommerce');
+            } else {
+              console.warn('No credentials found - user will need to re-sync for updates');
+              setCredentials(null);
             }
             
             // Handle different data structures
@@ -96,7 +100,7 @@ const App = () => {
             setHasExistingData(true);
             setCurrentView('editor');
           } else if (result.success && !result.hasData) {
-            console.log('User has no existing data, showing sync form...');
+            console.log('User has no data, showing sync form...');
             setHasExistingData(false);
             setCurrentView('form');
           } else {
@@ -121,48 +125,18 @@ const App = () => {
   }, [user, getAuthToken, dataCheckComplete]);
 
   const handleOAuthReturn = async (password, userLogin) => {
-    console.log('=== OAUTH RETURN HANDLER ===');
-    console.log('User login:', userLogin);
-    console.log('Stored form URL:', formData.url);
-    
-    // Get URL from localStorage if form data was lost
-    let storeUrl = formData.url;
-    if (!storeUrl) {
-      storeUrl = localStorage.getItem('karoosync_temp_url');
-      console.log('Retrieved URL from localStorage:', storeUrl);
-    }
-    
-    if (!storeUrl) {
-      setError('Store URL was lost during WordPress authentication. Please enter your store URL and try again.');
-      setCurrentView('form');
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-    
     setCurrentView('syncing');
     setSyncStatus('syncing');
     setSyncProgress(20);
     setSyncDetails('Processing WordPress authorization...');
 
     try {
-      // Ensure URL has protocol
-      let processedUrl = storeUrl.trim();
-      if (!processedUrl.startsWith('http')) {
-        processedUrl = `https://${processedUrl}`;
-      }
-      
       const authCredentials = {
-        url: processedUrl,
+        url: formData.url,
         authMethod: 'application',
         username: userLogin,
         appPassword: password
       };
-
-      console.log('OAuth credentials:', {
-        url: authCredentials.url,
-        username: authCredentials.username,
-        hasPassword: !!authCredentials.appPassword
-      });
 
       setCredentials(authCredentials);
       setSyncDetails('Authorization complete! Connecting to store...');
@@ -182,16 +156,12 @@ const App = () => {
         setSyncDetails('Sync complete!');
         setSyncStatus('complete');
         
-        // Clear temporary URL
-        localStorage.removeItem('karoosync_temp_url');
-        
         await new Promise(resolve => setTimeout(resolve, 800));
         setCurrentView('editor');
       } else {
         throw new Error(result.error || 'Store sync failed');
       }
     } catch (err) {
-      console.error('OAuth return error:', err);
       setSyncStatus('error');
       setError(err.message);
       setSyncProgress(0);
@@ -203,33 +173,23 @@ const App = () => {
   };
 
   const initializeWordPressAuth = async () => {
-    console.log('=== INITIALIZING WORDPRESS AUTH ===');
-    console.log('Form URL:', formData.url);
-    
-    if (!formData.url || formData.url.trim() === '') {
-      setError('Store URL is required for WordPress authentication');
+    if (!formData.url) {
+      setError('Store URL is required');
       return;
     }
 
     setError('');
-    
-    // Store URL temporarily in case form data gets lost during redirect
-    localStorage.setItem('karoosync_temp_url', formData.url);
-    
     try {
       const result = await initializeAppPasswordAuth(formData.url);
       
       if (result.success) {
         setAuthUrl(result.authUrl);
         setShowAuthFlow(true);
-        console.log('✅ WordPress auth URL generated');
       } else {
         setError(result.error);
-        localStorage.removeItem('karoosync_temp_url');
       }
     } catch (err) {
       setError('Failed to initialize WordPress authorization: ' + err.message);
-      localStorage.removeItem('karoosync_temp_url');
     }
   };
 
@@ -238,42 +198,14 @@ const App = () => {
     setShowAuthFlow(false);
     setAuthUrl('');
     setError('');
-    
-    // Clear temporary URL if switching away from WordPress auth
-    if (method !== 'application') {
-      localStorage.removeItem('karoosync_temp_url');
-    }
   };
 
   const handleSubmit = async () => {
     setError('');
-    
-    console.log('=== HANDLE SUBMIT START ===');
-    console.log('Auth method:', authMethod);
-    console.log('Show auth flow:', showAuthFlow);
-    console.log('Form data URL:', formData.url);
-    console.log('Form data username:', formData.username);
-    console.log('Form data consumer key:', formData.consumerKey?.substring(0, 10) + '...');
+    setLastError(null);
 
-    // For WordPress auth, handle the flow
     if (authMethod === 'application' && !showAuthFlow) {
       return initializeWordPressAuth();
-    }
-
-    // Validation
-    if (!formData.url || formData.url.trim() === '') {
-      setError('Store URL is required');
-      return;
-    }
-    
-    if (authMethod === 'woocommerce' && (!formData.consumerKey || !formData.consumerSecret)) {
-      setError('Consumer Key and Secret are required for WooCommerce API authentication');
-      return;
-    }
-    
-    if (authMethod === 'application' && (!formData.username || !formData.appPassword)) {
-      setError('Username and Application Password are required for WordPress authentication');
-      return;
     }
 
     setSyncStatus('syncing');
@@ -282,18 +214,28 @@ const App = () => {
     setSyncDetails('Initializing connection...');
 
     try {
-      // Process URL
+      if (!formData.url) {
+        throw new Error('Store URL is required');
+      }
+      
+      if (authMethod === 'woocommerce' && (!formData.consumerKey || !formData.consumerSecret)) {
+        throw new Error('Consumer Key and Secret are required for WooCommerce API authentication');
+      }
+      
+      if (authMethod === 'application' && (!formData.username || !formData.appPassword)) {
+        throw new Error('Username and Application Password are required');
+      }
+
       let url = formData.url.trim();
       if (!url.startsWith('http')) {
         url = `https://${url}`;
-        console.log('Added https:// to URL:', url);
       }
       
       setSyncDetails('Connecting to store...');
       setSyncProgress(10);
       
       const creds = {
-        url: url,
+        url,
         authMethod: authMethod,
         consumerKey: authMethod === 'woocommerce' ? formData.consumerKey.trim() : undefined,
         consumerSecret: authMethod === 'woocommerce' ? formData.consumerSecret.trim() : undefined,
@@ -301,24 +243,12 @@ const App = () => {
         appPassword: authMethod === 'application' ? formData.appPassword.trim() : undefined
       };
       
-      console.log('=== FINAL CREDENTIALS FOR SYNC ===');
-      console.log('URL:', creds.url);
-      console.log('Auth method:', creds.authMethod);
-      console.log('Has consumer key:', !!creds.consumerKey);
-      console.log('Has consumer secret:', !!creds.consumerSecret);
-      console.log('Has username:', !!creds.username);
-      console.log('Has app password:', !!creds.appPassword);
-      
       setCredentials(creds);
       
-      setSyncDetails('Syncing data from WooCommerce...');
+      setSyncDetails('Syncing fresh data from WooCommerce...');
       setSyncProgress(30);
       
       const authToken = await getAuthToken();
-      if (!authToken) {
-        throw new Error('Failed to get authentication token');
-      }
-      
       const syncStartTime = Date.now();
       const result = await syncStore(creds, authToken);
       
@@ -335,17 +265,17 @@ const App = () => {
         setSyncData(result.data);
         setHasExistingData(true);
         
-        // Clear temporary URL
-        localStorage.removeItem('karoosync_temp_url');
-        
         await new Promise(resolve => setTimeout(resolve, 800));
         setCurrentView('editor');
       } else {
         setSyncStatus('error');
+        setLastError({
+          message: result.error,
+          details: result
+        });
         throw new Error(result.error || 'Sync failed');
       }
     } catch (err) {
-      console.error('=== SUBMIT ERROR ===', err);
       setSyncStatus('error');
       setError(err.message);
       setSyncProgress(0);
@@ -445,13 +375,11 @@ const App = () => {
     setError('');
     setSyncStatus('idle');
     setSyncProgress(0);
+    setLastError(null);
     setShowAuthFlow(false);
     setAuthUrl('');
     setHasExistingData(false);
     setDataCheckComplete(false);
-    
-    // Clear any temporary data
-    localStorage.removeItem('karoosync_temp_url');
   };
 
   if (currentView === 'checking-data') {
@@ -496,9 +424,12 @@ const App = () => {
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 {hasExistingData ? 'Update Store Connection' : 'Connect Your Store'}
               </h1>
-              <p className="text-gray-600 mb-2">
-                {hasExistingData ? 'Update your store credentials or sync fresh data' : 'Connect your WooCommerce store to get started'}
-              </p>
+              {dataCheckComplete && !hasExistingData && (
+                <p className="text-gray-600 mb-2">No store data found. Let's connect your WooCommerce store!</p>
+              )}
+              {hasExistingData && (
+                <p className="text-gray-600 mb-2">Update your store credentials or sync fresh data</p>
+              )}
               <p className="text-gray-600">WooCommerce Product Editor</p>
               
               <div className="flex items-center justify-center mt-4 text-sm text-gray-500">
@@ -547,7 +478,7 @@ const App = () => {
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Store URL *
+                    Store URL
                   </label>
                   <input
                     type="text"
@@ -561,27 +492,20 @@ const App = () => {
                   <p className="text-xs text-gray-500 mt-1">We'll automatically add https:// if needed</p>
                 </div>
 
-                {authMethod === 'application' && !showAuthFlow && (
+                {authMethod === 'application' && !showAuthFlow ? (
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                     <p className="text-blue-800 text-sm mb-3">
-                      Enter your store URL above, then click "Authorize with WordPress" to connect securely.
+                      Click "Authorize with WordPress" to connect securely through your WordPress site.
                     </p>
                     <button
                       type="button"
                       onClick={handleSubmit}
-                      disabled={!formData.url}
-                      className={`w-full font-semibold py-3 px-6 rounded-xl transition duration-200 ${
-                        formData.url
-                          ? 'bg-blue-600 text-white hover:bg-blue-700'
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      }`}
+                      className="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 transition duration-200"
                     >
                       Authorize with WordPress
                     </button>
                   </div>
-                )}
-
-                {authMethod === 'application' && showAuthFlow && (
+                ) : authMethod === 'application' && showAuthFlow ? (
                   <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                     <p className="text-green-800 text-sm mb-3">
                       WordPress authorization URL generated. Click to complete authentication:
@@ -596,16 +520,14 @@ const App = () => {
                       Complete WordPress Authentication
                     </a>
                     <p className="text-xs text-green-600 mt-2">
-                      After authorization, you'll be redirected back automatically
+                      After authorization, you'll be redirected back with credentials
                     </p>
                   </div>
-                )}
-
-                {authMethod === 'woocommerce' && (
+                ) : authMethod === 'woocommerce' ? (
                   <>
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Consumer Key *
+                        Consumer Key
                       </label>
                       <input
                         type="text"
@@ -620,7 +542,7 @@ const App = () => {
 
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Consumer Secret *
+                        Consumer Secret
                       </label>
                       <input
                         type="password"
@@ -638,24 +560,12 @@ const App = () => {
                         <Info className="w-5 h-5 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
                         <p className="text-blue-700 text-sm">
                           WooCommerce API keys must have <strong>Read/Write</strong> permissions. 
-                          Generate them in WooCommerce → Settings → Advanced → REST API.
+                          You can set this in WooCommerce → Settings → Advanced → REST API.
                         </p>
                       </div>
                     </div>
-
-                    <button
-                      onClick={handleSubmit}
-                      disabled={!formData.url || !formData.consumerKey || !formData.consumerSecret}
-                      className={`w-full font-semibold py-3 px-6 rounded-xl transition duration-200 shadow-lg ${
-                        formData.url && formData.consumerKey && formData.consumerSecret
-                          ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 transform hover:scale-105 hover:shadow-xl'
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      }`}
-                    >
-                      {hasExistingData ? 'Update & Sync Store' : 'Connect to Store'}
-                    </button>
                   </>
-                )}
+                ) : null}
 
                 {error && (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4">
@@ -664,6 +574,15 @@ const App = () => {
                       <p className="text-red-700 text-sm">{error}</p>
                     </div>
                   </div>
+                )}
+
+                {authMethod === 'woocommerce' && (
+                  <button
+                    onClick={handleSubmit}
+                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold py-3 px-6 rounded-xl hover:from-blue-600 hover:to-purple-700 transform hover:scale-105 transition duration-200 shadow-lg hover:shadow-xl"
+                  >
+                    {hasExistingData ? 'Update & Sync Store' : 'Connect to Store'}
+                  </button>
                 )}
               </div>
             </div>
