@@ -1,31 +1,57 @@
 const API_ENDPOINT = process.env.REACT_APP_API_ENDPOINT || 'https://tmaob4c6n9.execute-api.ap-southeast-2.amazonaws.com/v1/sync';
 const OAUTH_REDIRECT_URI = process.env.REACT_APP_REDIRECT_URI || 
   (window.location.hostname === 'localhost' 
-    ? 'https://karoosync.com/oauth/callback'
+    ? 'https://your-domain.com/oauth/callback'
     : `${window.location.origin}/oauth/callback`);
 
 const handleApiResponse = async (response) => {
+  console.log(`=== API RESPONSE ===`);
+  console.log('Status:', response.status);
+  console.log('Status text:', response.statusText);
+  console.log('Headers:', Object.fromEntries(response.headers.entries()));
+  
   if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}`;
+    let errorDetails = null;
+    
     try {
-      const errorData = await response.json();
-      throw new Error(errorData.error || errorData.message || `Server responded with ${response.status}`);
-    } catch (jsonError) {
-      try {
-        const textContent = await response.text();
-        if (textContent.includes('<!DOCTYPE html>')) {
-          throw new Error(`Server returned HTML instead of JSON. Status: ${response.status}. Check if the store URL is correct and includes 'https://'`);
+      const responseText = await response.text();
+      console.log('Error response body:', responseText);
+      
+      if (responseText) {
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+          errorDetails = errorData.details || null;
+          
+          console.log('Parsed error data:', errorData);
+        } catch (jsonError) {
+          console.log('Could not parse error as JSON, using raw text');
+          errorMessage = responseText.substring(0, 200) + (responseText.length > 200 ? '...' : '');
         }
-        throw new Error(`Server error: ${response.status} - ${textContent.substring(0, 100)}...`);
-      } catch (textError) {
-        throw new Error(`Request failed with status: ${response.status}`);
       }
+    } catch (textError) {
+      console.error('Failed to read error response:', textError);
     }
+    
+    const error = new Error(errorMessage);
+    error.status = response.status;
+    error.details = errorDetails;
+    throw error;
   }
   
   try {
-    return await response.json();
+    const responseText = await response.text();
+    console.log('Success response body preview:', responseText.substring(0, 200) + '...');
+    
+    if (!responseText.trim()) {
+      throw new Error('Empty response from server');
+    }
+    
+    return JSON.parse(responseText);
   } catch (error) {
-    throw new Error(`Failed to parse successful response as JSON: ${error.message}`);
+    console.error('Failed to parse successful response:', error);
+    throw new Error(`Failed to parse response as JSON: ${error.message}`);
   }
 };
 
@@ -39,12 +65,20 @@ const generateUUID = () => {
 
 export const checkUserData = async (authToken) => {
   try {
-    console.log('Checking for user data...');
+    console.log('=== CHECK USER DATA START ===');
+    
+    if (!authToken) {
+      throw new Error('No authentication token provided');
+    }
     
     const headers = { 
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${authToken}` 
+      'Authorization': `Bearer ${authToken}`,
+      'Cache-Control': 'no-cache'
     };
+    
+    console.log('Making request to check user data...');
+    console.log('Headers:', headers);
     
     const response = await fetch(`${API_ENDPOINT}?action=check-data`, {
       method: 'GET',
@@ -53,57 +87,73 @@ export const checkUserData = async (authToken) => {
     
     const result = await handleApiResponse(response);
     
-    if (result.success) {
-      if (result.structure === 'categorized') {
-        console.log(`Found categorized data: ${result.totalProducts} products in ${result.availableCategories?.length || 0} categories (${result.cacheAgeHours}h old)`);
-        if (result.credentials) {
-          console.log('Stored credentials found for updates');
-        } else {
-          console.warn('No stored credentials - updates will be disabled');
-        }
-      } else if (result.structure === 'legacy') {
-        console.log(`Found legacy data: ${result.productCount} products (needs migration) (${result.cacheAgeHours}h old)`);
-      } else {
-        console.log('No user data found');
-      }
-    }
+    console.log('✅ Check user data response:', {
+      success: result.success,
+      hasData: result.hasData,
+      structure: result.structure,
+      totalProducts: result.totalProducts || result.productCount || 0
+    });
     
     return result;
   } catch (error) {
-    console.error('Failed to check user data:', error);
+    console.error('❌ Check user data failed:', error);
+    
+    let errorMessage = error.message;
+    
+    if (error.status === 400) {
+      errorMessage = 'Bad request: ' + errorMessage;
+    } else if (error.status === 401 || error.status === 403) {
+      errorMessage = 'Authentication failed. Please try logging out and back in.';
+    } else if (error.status === 500) {
+      errorMessage = 'Server error: ' + errorMessage;
+    } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      errorMessage = 'Network error. Please check your internet connection and try again.';
+    }
+    
     return { 
       success: false, 
-      error: error.message 
+      error: errorMessage,
+      status: error.status,
+      details: error.details,
+      retryable: !errorMessage.includes('Authentication')
     };
   }
 };
 
 export const loadCategoryProducts = async (categoryKey, authToken) => {
   try {
-    console.log(`Loading products for category: ${categoryKey}`);
+    console.log(`=== LOADING CATEGORY: ${categoryKey} ===`);
+    
+    if (!authToken) {
+      throw new Error('No authentication token provided');
+    }
     
     const headers = { 
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${authToken}` 
     };
     
-    const response = await fetch(`${API_ENDPOINT}?action=load-category&category=${encodeURIComponent(categoryKey)}`, {
-      method: 'GET',
-      headers
-    });
+    const response = await fetch(
+      `${API_ENDPOINT}?action=load-category&category=${encodeURIComponent(categoryKey)}`, 
+      {
+        method: 'GET',
+        headers
+      }
+    );
     
     const result = await handleApiResponse(response);
     
     if (result.success) {
-      console.log(`Loaded ${result.products?.length || 0} products from category ${categoryKey}`);
+      console.log(`✅ Loaded ${result.products?.length || 0} products from category ${categoryKey}`);
     }
     
     return result;
   } catch (error) {
-    console.error(`Failed to load category ${categoryKey}:`, error);
+    console.error(`❌ Failed to load category ${categoryKey}:`, error);
     return { 
       success: false, 
-      error: error.message 
+      error: error.message,
+      status: error.status
     };
   }
 };
@@ -145,23 +195,57 @@ export const initializeAppPasswordAuth = async (storeUrl) => {
 
 export const syncStore = async (credentials, authToken = null) => {
   try {
+    console.log('=== SYNC STORE START ===');
+    
     let url = credentials.url;
     if (url && !url.startsWith('http')) {
       url = `https://${url}`;
       credentials = { ...credentials, url };
     }
     
+    console.log('=== REQUEST DETAILS ===');
     console.log(`Connecting to: ${url}`);
+    console.log('Auth method:', credentials.authMethod);
+    console.log('Has consumer key:', !!credentials.consumerKey);
+    console.log('Has consumer secret:', !!credentials.consumerSecret);
+    console.log('Has username:', !!credentials.username);
+    console.log('Has app password:', !!credentials.appPassword);
+    console.log('Auth token available:', !!authToken);
     
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = { 
+      'Content-Type': 'application/json'
+    };
+    
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
     
+    const requestBody = {
+      url: credentials.url,
+      authMethod: credentials.authMethod,
+      consumerKey: credentials.consumerKey,
+      consumerSecret: credentials.consumerSecret,
+      username: credentials.username,
+      appPassword: credentials.appPassword
+    };
+    
+    console.log('=== SENDING REQUEST ===');
+    console.log('Endpoint:', API_ENDPOINT);
+    console.log('Method: POST');
+    console.log('Headers:', headers);
+    console.log('Body structure:', {
+      url: !!requestBody.url,
+      authMethod: requestBody.authMethod,
+      hasConsumerKey: !!requestBody.consumerKey,
+      hasConsumerSecret: !!requestBody.consumerSecret,
+      hasUsername: !!requestBody.username,
+      hasAppPassword: !!requestBody.appPassword
+    });
+    
     const response = await fetch(API_ENDPOINT, {
       method: 'POST',
       headers,
-      body: JSON.stringify(credentials)
+      body: JSON.stringify(requestBody)
     });
     
     const result = await handleApiResponse(response);
@@ -169,13 +253,12 @@ export const syncStore = async (credentials, authToken = null) => {
     if (result.success) {
       // Handle new categorized structure
       if (result.structure === 'categorized') {
-        console.log(`Sync complete: ${result.metadata?.totalProducts || 0} products organized into ${result.categoriesStored || 0} categories`);
+        console.log(`✅ Sync complete: ${result.metadata?.totalProducts || 0} products organized into ${result.categoriesStored || 0} categories`);
         
-        // Return data structure that matches what App.js expects
         return {
           success: true,
           data: {
-            products: [], // Empty array for compatibility with existing ProductEditor
+            products: [],
             categories: result.metadata?.categories || [],
             attributes: result.metadata?.attributes || [],
             systemStatus: result.metadata?.systemStatus,
@@ -197,11 +280,17 @@ export const syncStore = async (credentials, authToken = null) => {
     
     return result;
   } catch (error) {
-    console.error("Sync store error:", error);
+    console.error("❌ Sync store error:", error);
     
     let errorMessage = error.message;
     
-    if (errorMessage.includes('HTML instead of JSON')) {
+    if (error.status === 400) {
+      errorMessage = 'Bad request - check your store URL and credentials: ' + errorMessage;
+    } else if (error.status === 401) {
+      errorMessage = 'Authentication failed - check your credentials: ' + errorMessage;
+    } else if (error.status === 500) {
+      errorMessage = 'Server error - try again in a moment: ' + errorMessage;
+    } else if (errorMessage.includes('HTML instead of JSON')) {
       errorMessage = 'Connection error: The store URL may be incorrect or the site is not responding with proper WooCommerce API data.';
     } else if (errorMessage.includes('API key') && errorMessage.includes('permissions')) {
       errorMessage = 'Permission error: Make sure your WooCommerce API key has Read/Write permissions.';
@@ -213,7 +302,9 @@ export const syncStore = async (credentials, authToken = null) => {
     
     return { 
       success: false, 
-      error: errorMessage
+      error: errorMessage,
+      status: error.status,
+      details: error.details
     };
   }
 };
@@ -233,7 +324,6 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
     console.log('Updated data keys:', Object.keys(updatedData || {}));
     console.log('Auth token present:', !!authToken);
 
-    // Handle case where credentials might be null (shouldn't happen, but safety first)
     if (!credentials) {
       throw new Error('No credentials available for product update. Please re-sync your store.');
     }
@@ -271,7 +361,7 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
       productData: processedProductData
     };
 
-    console.log('=== REQUEST DETAILS ===');
+    console.log('=== UPDATE REQUEST DETAILS ===');
     console.log('API Endpoint:', API_ENDPOINT);
     console.log('Request method: PUT');
     console.log('Request headers:', headers);
@@ -296,57 +386,13 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
       body: JSON.stringify(requestBody)
     });
 
-    console.log('=== RESPONSE DETAILS ===');
-    console.log('Response status:', response.status);
-    console.log('Response ok:', response.ok);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
-    // Get response text first to debug what we're actually receiving
-    const responseText = await response.text();
-    console.log('=== RAW RESPONSE ===');
-    console.log('Response length:', responseText.length);
-    console.log('Response first 1000 chars:', responseText.substring(0, 1000));
-    
-    if (!responseText) {
-      throw new Error('Lambda returned empty response');
-    }
-    
-    let result;
-    try {
-      result = JSON.parse(responseText);
-      console.log('=== PARSED RESPONSE ===');
-      console.log('Parsed result:', result);
+    const result = await handleApiResponse(response);
       
-      // Handle AWS Lambda response format
-      if (result.statusCode && result.body && typeof result.body === 'string') {
-        console.log('=== DETECTED AWS LAMBDA RESPONSE FORMAT ===');
-        console.log('Status Code:', result.statusCode);
-        console.log('Parsing body...');
-        
-        try {
-          const actualResult = JSON.parse(result.body);
-          console.log('=== ACTUAL RESPONSE DATA ===');
-          console.log('Actual result:', actualResult);
-          result = actualResult;
-        } catch (bodyParseError) {
-          console.error('Failed to parse Lambda body:', bodyParseError);
-          throw new Error(`Lambda returned invalid body format: ${result.body.substring(0, 100)}...`);
-        }
-      }
-    } catch (parseError) {
-      console.error('Failed to parse Lambda response as JSON:', parseError);
-      console.error('Raw response that failed to parse:', responseText);
-      throw new Error(`Server returned invalid response: ${responseText.substring(0, 100)}...`);
-    }
-      
-    // Check if the response indicates success
     if (!result.success) {
       console.log('=== LAMBDA FAILURE RESPONSE ===');
       console.log('result.success:', result.success);
       console.log('result.error:', result.error);
       console.log('result.message:', result.message);
-      console.log('All result keys:', Object.keys(result));
-      console.log('Full result object:', JSON.stringify(result, null, 2));
       
       const errorMessage = result.error || result.message || 'Update failed - no error details provided';
       console.error('Lambda returned failure:', errorMessage);
@@ -358,7 +404,6 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
     console.log('result.s3Updated:', result.s3Updated);
     console.log('result.categoriesUpdated:', result.categoriesUpdated);
     
-    // Log detailed success info
     if (result.s3Updated === false) {
       console.warn('Product updated in WooCommerce but S3 sync failed:', result.s3Error);
       console.log(`Categories updated: ${result.categoriesUpdated || 0}`);
@@ -371,14 +416,19 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
   } catch (error) {
     console.error("=== UPDATE PRODUCT ERROR ===");
     console.error("Error object:", error);
-    console.error("Error type:", typeof error);
     console.error("Error message:", error.message);
-    console.error("Error stack:", error.stack);
+    console.error("Error status:", error.status);
+    console.error("Error details:", error.details);
     
     let errorMessage = error.message;
     
-    // More specific error handling
-    if (errorMessage.includes('No stored credentials found')) {
+    if (error.status === 400) {
+      errorMessage = 'Bad request: ' + errorMessage;
+    } else if (error.status === 401) {
+      errorMessage = 'Authentication failed: ' + errorMessage;
+    } else if (error.status === 500) {
+      errorMessage = 'Server error: ' + errorMessage;
+    } else if (errorMessage.includes('No stored credentials found')) {
       errorMessage = 'Store credentials have expired. Please re-sync your store to enable updates.';
     } else if (errorMessage.includes('API key') && errorMessage.includes('write permissions')) {
       errorMessage = 'Permission error: Your WooCommerce API key does not have write permissions. Please update your API key to have Read/Write access.';
@@ -386,13 +436,13 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
       errorMessage = 'Connection error: The store URL may be incorrect or the site is not responding with proper WooCommerce API data.';
     } else if (errorMessage.includes('Failed to fetch')) {
       errorMessage = 'Network error: Could not connect to the server. Please check your internet connection.';
-    } else if (errorMessage.includes('Server returned invalid response')) {
-      errorMessage = 'Server error: The server returned an invalid response. This may be a temporary issue.';
     }
     
     return { 
       success: false, 
-      error: errorMessage
+      error: errorMessage,
+      status: error.status,
+      details: error.details
     };
   }
 };
