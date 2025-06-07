@@ -220,6 +220,19 @@ export const syncStore = async (credentials, authToken = null) => {
 
 export const updateProduct = async (credentials, productId, updatedData, authToken = null) => {
   try {
+    console.log('=== UPDATE PRODUCT DEBUG START ===');
+    console.log('Input credentials:', {
+      url: credentials?.url,
+      authMethod: credentials?.authMethod,
+      hasConsumerKey: !!credentials?.consumerKey,
+      hasConsumerSecret: !!credentials?.consumerSecret,
+      hasUsername: !!credentials?.username,
+      hasAppPassword: !!credentials?.appPassword
+    });
+    console.log('Product ID:', productId);
+    console.log('Updated data keys:', Object.keys(updatedData || {}));
+    console.log('Auth token present:', !!authToken);
+
     // Handle case where credentials might be null (shouldn't happen, but safety first)
     if (!credentials) {
       throw new Error('No credentials available for product update. Please re-sync your store.');
@@ -258,6 +271,23 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
       productData: processedProductData
     };
 
+    console.log('=== REQUEST DETAILS ===');
+    console.log('API Endpoint:', API_ENDPOINT);
+    console.log('Request method: PUT');
+    console.log('Request headers:', headers);
+    console.log('Request body structure:', {
+      url: requestBody.url,
+      authMethod: requestBody.authMethod,
+      action: requestBody.action,
+      productId: requestBody.productId,
+      hasProductData: !!requestBody.productData,
+      productDataKeys: Object.keys(requestBody.productData || {}),
+      hasConsumerKey: !!requestBody.consumerKey,
+      hasConsumerSecret: !!requestBody.consumerSecret,
+      hasUsername: !!requestBody.username,
+      hasAppPassword: !!requestBody.appPassword
+    });
+
     console.log('Sending update request to Lambda...');
 
     const response = await fetch(API_ENDPOINT, {
@@ -266,24 +296,67 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
       body: JSON.stringify(requestBody)
     });
 
+    console.log('=== RESPONSE DETAILS ===');
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
     // Get response text first to debug what we're actually receiving
     const responseText = await response.text();
-    console.log('Raw Lambda response:', responseText.substring(0, 500) + '...');
+    console.log('=== RAW RESPONSE ===');
+    console.log('Response length:', responseText.length);
+    console.log('Response first 1000 chars:', responseText.substring(0, 1000));
+    
+    if (!responseText) {
+      throw new Error('Lambda returned empty response');
+    }
     
     let result;
     try {
       result = JSON.parse(responseText);
+      console.log('=== PARSED RESPONSE ===');
+      console.log('Parsed result:', result);
+      
+      // Handle AWS Lambda response format
+      if (result.statusCode && result.body && typeof result.body === 'string') {
+        console.log('=== DETECTED AWS LAMBDA RESPONSE FORMAT ===');
+        console.log('Status Code:', result.statusCode);
+        console.log('Parsing body...');
+        
+        try {
+          const actualResult = JSON.parse(result.body);
+          console.log('=== ACTUAL RESPONSE DATA ===');
+          console.log('Actual result:', actualResult);
+          result = actualResult;
+        } catch (bodyParseError) {
+          console.error('Failed to parse Lambda body:', bodyParseError);
+          throw new Error(`Lambda returned invalid body format: ${result.body.substring(0, 100)}...`);
+        }
+      }
     } catch (parseError) {
       console.error('Failed to parse Lambda response as JSON:', parseError);
+      console.error('Raw response that failed to parse:', responseText);
       throw new Error(`Server returned invalid response: ${responseText.substring(0, 100)}...`);
     }
       
     // Check if the response indicates success
     if (!result.success) {
+      console.log('=== LAMBDA FAILURE RESPONSE ===');
+      console.log('result.success:', result.success);
+      console.log('result.error:', result.error);
+      console.log('result.message:', result.message);
+      console.log('All result keys:', Object.keys(result));
+      console.log('Full result object:', JSON.stringify(result, null, 2));
+      
       const errorMessage = result.error || result.message || 'Update failed - no error details provided';
       console.error('Lambda returned failure:', errorMessage);
       throw new Error(errorMessage);
     }
+    
+    console.log('=== SUCCESS RESPONSE ===');
+    console.log('result.success:', result.success);
+    console.log('result.s3Updated:', result.s3Updated);
+    console.log('result.categoriesUpdated:', result.categoriesUpdated);
     
     // Log detailed success info
     if (result.s3Updated === false) {
@@ -292,10 +365,15 @@ export const updateProduct = async (credentials, productId, updatedData, authTok
     } else {
       console.log(`Product updated successfully - WooCommerce ✅, S3 categories: ${result.categoriesUpdated || 0} ✅`);
     }
-      
+    
+    console.log('=== UPDATE PRODUCT DEBUG END ===');
     return result;
   } catch (error) {
-    console.error("Update product error:", error);
+    console.error("=== UPDATE PRODUCT ERROR ===");
+    console.error("Error object:", error);
+    console.error("Error type:", typeof error);
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
     
     let errorMessage = error.message;
     
