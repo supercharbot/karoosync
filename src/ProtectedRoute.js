@@ -1,19 +1,20 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Authenticator } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import { useAuth } from './AuthContext';
 import { Store } from 'lucide-react';
 
 const ProtectedRoute = ({ children }) => {
-  const { loading } = useAuth();
+  const { setAuthenticatedUser } = useAuth();
+  const [authenticatedUser, setAuthenticatedUserState] = useState(null);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  // When we get a user from Authenticator, update AuthContext
+  useEffect(() => {
+    if (authenticatedUser) {
+      console.log('🔄 Authenticator confirmed user, setting in AuthContext...');
+      setAuthenticatedUser(authenticatedUser);
+    }
+  }, [authenticatedUser, setAuthenticatedUser]);
 
   return (
     <Authenticator
@@ -52,7 +53,15 @@ const ProtectedRoute = ({ children }) => {
         }
       }}
     >
-      {({ user }) => children}
+      {({ user }) => {
+        // Update our local state when Authenticator gives us a user
+        if (user && user !== authenticatedUser) {
+          setAuthenticatedUserState(user);
+        }
+
+        // Only render children if we have a user
+        return user ? children : null;
+      }}
     </Authenticator>
   );
 };

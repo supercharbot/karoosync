@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { Amplify } from 'aws-amplify';
-import { getCurrentUser, signOut, fetchAuthSession } from 'aws-amplify/auth';
+import { signOut, fetchAuthSession } from 'aws-amplify/auth';
 import { awsConfig } from './aws-config';
 
 Amplify.configure(awsConfig);
@@ -17,42 +17,42 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [hasSubscription, setHasSubscription] = useState(true); // Set to true for testing
+  const [hasSubscription, setHasSubscription] = useState(true);
 
-  useEffect(() => {
-    checkAuthState();
-  }, []);
-
-  const checkAuthState = async () => {
-    try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-      setHasSubscription(true); // For now, assume all logged-in users have subscription
-    } catch (error) {
-      setUser(null);
-      setHasSubscription(false);
-    } finally {
-      setLoading(false);
-    }
+  // This will be called by ProtectedRoute when Authenticator confirms user
+  const setAuthenticatedUser = (authenticatedUser) => {
+    console.log('✅ Setting authenticated user:', authenticatedUser?.username);
+    setUser(authenticatedUser);
+    setHasSubscription(true);
   };
 
   const logout = async () => {
     try {
+      console.log('🔄 Logging out...');
       await signOut();
       setUser(null);
       setHasSubscription(false);
+      console.log('✅ Logout successful');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('❌ Logout error:', error);
     }
   };
 
   const getAuthToken = async () => {
     try {
+      console.log('🔄 Getting auth token...');
       const session = await fetchAuthSession();
-      return session.tokens?.idToken?.toString();
+      const token = session.tokens?.idToken?.toString();
+      
+      if (token) {
+        console.log('✅ Auth token retrieved successfully');
+        return token;
+      } else {
+        console.warn('⚠️ No token found in session');
+        return null;
+      }
     } catch (error) {
-      console.error('Token retrieval failed:', error);
+      console.error('❌ Token retrieval failed:', error);
       return null;
     }
   };
@@ -60,10 +60,10 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     hasSubscription,
-    loading,
+    loading: false, // No loading since we don't check auth state here
     logout,
     getAuthToken,
-    checkAuthState
+    setAuthenticatedUser // Expose this so ProtectedRoute can set the user
   };
 
   return (

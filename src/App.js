@@ -25,7 +25,6 @@ const App = () => {
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncDetails, setSyncDetails] = useState('');
   const [lastError, setLastError] = useState(null);
-  const [checkingData, setCheckingData] = useState(false);
   const [hasExistingData, setHasExistingData] = useState(false);
   const [dataCheckComplete, setDataCheckComplete] = useState(false);
 
@@ -42,25 +41,16 @@ const App = () => {
     }
 
     if (password && userLogin) {
-      // FIXED: Retrieve the stored URL from localStorage before processing OAuth
-      const storedUrl = localStorage.getItem('karoosync_oauth_url');
-      if (storedUrl) {
-        console.log('=== OAUTH CALLBACK: Retrieved stored URL ===', storedUrl);
-        setFormData(prev => ({ ...prev, url: storedUrl }));
-        handleOAuthReturn(password, userLogin, storedUrl);
-      } else {
-        setError('OAuth callback received but store URL was lost. Please try again.');
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
+      handleOAuthReturn(password, userLogin);
     }
   }, []);
 
+  // Check for existing data when user is available
   useEffect(() => {
     const checkForExistingData = async () => {
       if (user && !dataCheckComplete) {
-        console.log('=== Starting data check for user ===');
-        setCheckingData(true);
-        setCurrentView('checking-data');
+        console.log('=== STARTING DATA CHECK FOR USER ===');
+        console.log('User:', user.username);
         
         try {
           const authToken = await getAuthToken();
@@ -77,7 +67,6 @@ const App = () => {
               setCredentials(result.credentials);
               console.log('Credentials loaded from storage');
               
-              // Set form data for potential re-sync
               setFormData({
                 url: result.credentials.url || '',
                 consumerKey: result.credentials.consumerKey || '',
@@ -93,21 +82,18 @@ const App = () => {
             
             // Handle different data structures
             if (result.structure === 'categorized') {
-              // For categorized data, set up the structure
               setSyncData({
                 structure: 'categorized',
                 categories: result.metadata.categories,
                 attributes: result.metadata.attributes,
                 systemStatus: result.metadata.systemStatus,
                 totalProducts: result.totalProducts,
-                products: [], // Empty array for compatibility
+                products: [],
                 availableCategories: result.availableCategories
               });
             } else if (result.structure === 'legacy') {
-              // For legacy data, use the data property
               setSyncData(result.data);
             } else {
-              // Fallback for any other structure
               setSyncData(result.data || result);
             }
             
@@ -129,9 +115,8 @@ const App = () => {
           setHasExistingData(false);
           setCurrentView('form');
         } finally {
-          setCheckingData(false);
           setDataCheckComplete(true);
-          console.log('=== Data check complete ===');
+          console.log('=== DATA CHECK COMPLETE ===');
         }
       }
     };
@@ -139,52 +124,19 @@ const App = () => {
     checkForExistingData();
   }, [user, getAuthToken, dataCheckComplete]);
 
-  // Failsafe timeout - prevent infinite checking
-  useEffect(() => {
-    if (currentView === 'checking-data') {
-      const timeout = setTimeout(() => {
-        console.log('=== TIMEOUT: Forcing redirect to form ===');
-        setCheckingData(false);
-        setDataCheckComplete(true);
-        setCurrentView('form');
-        setError('Data check timed out. Please try connecting your store.');
-      }, 10000); // 10 second timeout
-
-      return () => clearTimeout(timeout);
-    }
-  }, [currentView]);
-
-  const handleOAuthReturn = async (password, userLogin, storeUrl) => {
-    console.log('=== OAUTH RETURN ===');
-    console.log('Password received:', !!password);
-    console.log('User login:', userLogin);
-    console.log('Store URL:', storeUrl);
-    
-    if (!storeUrl) {
-      setError('Store URL is missing for OAuth callback. Please try again.');
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-
+  const handleOAuthReturn = async (password, userLogin) => {
     setCurrentView('syncing');
     setSyncStatus('syncing');
     setSyncProgress(20);
     setSyncDetails('Processing WordPress authorization...');
 
     try {
-      // FIXED: Use the passed storeUrl parameter
       const authCredentials = {
-        url: storeUrl,
+        url: formData.url,
         authMethod: 'application',
         username: userLogin,
         appPassword: password
       };
-
-      console.log('=== SYNC CREDENTIALS ===');
-      console.log('URL:', authCredentials.url);
-      console.log('Auth method:', authCredentials.authMethod);
-      console.log('Username:', authCredentials.username);
-      console.log('Has app password:', !!authCredentials.appPassword);
 
       setCredentials(authCredentials);
       setSyncDetails('Authorization complete! Connecting to store...');
@@ -206,22 +158,15 @@ const App = () => {
         
         await new Promise(resolve => setTimeout(resolve, 800));
         setCurrentView('editor');
-        
-        // Clean up stored URL after successful sync
-        localStorage.removeItem('karoosync_oauth_url');
       } else {
         throw new Error(result.error || 'Store sync failed');
       }
     } catch (err) {
-      console.error('OAuth sync error:', err);
       setSyncStatus('error');
       setError(err.message);
       setSyncProgress(0);
       await new Promise(resolve => setTimeout(resolve, 800));
       setCurrentView('form');
-      
-      // Clean up stored URL on error
-      localStorage.removeItem('karoosync_oauth_url');
     } finally {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
@@ -234,11 +179,6 @@ const App = () => {
     }
 
     setError('');
-    
-    // FIXED: Store the URL in localStorage before redirect
-    console.log('=== STORING URL FOR OAUTH ===', formData.url);
-    localStorage.setItem('karoosync_oauth_url', formData.url);
-    
     try {
       const result = await initializeAppPasswordAuth(formData.url);
       
@@ -246,11 +186,9 @@ const App = () => {
         setAuthUrl(result.authUrl);
         setShowAuthFlow(true);
       } else {
-        localStorage.removeItem('karoosync_oauth_url'); // Clean up on error
         setError(result.error);
       }
     } catch (err) {
-      localStorage.removeItem('karoosync_oauth_url'); // Clean up on error
       setError('Failed to initialize WordPress authorization: ' + err.message);
     }
   };
@@ -260,8 +198,6 @@ const App = () => {
     setShowAuthFlow(false);
     setAuthUrl('');
     setError('');
-    // Clean up any stored OAuth data when switching methods
-    localStorage.removeItem('karoosync_oauth_url');
   };
 
   const handleSubmit = async () => {
@@ -395,7 +331,6 @@ const App = () => {
     try {
       const authToken = await getAuthToken();
       
-      // Use stored credentials if available, otherwise pass current credentials
       const updateCredentials = credentials || {
         url: formData.url,
         authMethod: authMethod,
@@ -408,7 +343,6 @@ const App = () => {
       const result = await updateProduct(updateCredentials, productId, updatedData, authToken);
       
       if (result.success) {
-        // Update sync data if it exists and is in legacy format
         if (syncData && syncData.products) {
           setSyncData(prev => ({
             ...prev,
@@ -435,7 +369,7 @@ const App = () => {
   };
 
   const resetForm = () => {
-    setCurrentView('form');
+    setCurrentView('checking-data');
     setSyncData(null);
     setCredentials(null);
     setError('');
@@ -446,12 +380,9 @@ const App = () => {
     setAuthUrl('');
     setHasExistingData(false);
     setDataCheckComplete(false);
-    setCheckingData(false);
-    // Clean up any stored OAuth data
-    localStorage.removeItem('karoosync_oauth_url');
   };
 
-  if (currentView === 'checking-data' || checkingData) {
+  if (currentView === 'checking-data') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
         <div className="text-center max-w-md w-full p-6">
