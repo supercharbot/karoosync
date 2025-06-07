@@ -42,7 +42,16 @@ const App = () => {
     }
 
     if (password && userLogin) {
-      handleOAuthReturn(password, userLogin);
+      // FIXED: Retrieve the stored URL from localStorage before processing OAuth
+      const storedUrl = localStorage.getItem('karoosync_oauth_url');
+      if (storedUrl) {
+        console.log('=== OAUTH CALLBACK: Retrieved stored URL ===', storedUrl);
+        setFormData(prev => ({ ...prev, url: storedUrl }));
+        handleOAuthReturn(password, userLogin, storedUrl);
+      } else {
+        setError('OAuth callback received but store URL was lost. Please try again.');
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     }
   }, []);
 
@@ -145,19 +154,37 @@ const App = () => {
     }
   }, [currentView]);
 
-  const handleOAuthReturn = async (password, userLogin) => {
+  const handleOAuthReturn = async (password, userLogin, storeUrl) => {
+    console.log('=== OAUTH RETURN ===');
+    console.log('Password received:', !!password);
+    console.log('User login:', userLogin);
+    console.log('Store URL:', storeUrl);
+    
+    if (!storeUrl) {
+      setError('Store URL is missing for OAuth callback. Please try again.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+
     setCurrentView('syncing');
     setSyncStatus('syncing');
     setSyncProgress(20);
     setSyncDetails('Processing WordPress authorization...');
 
     try {
+      // FIXED: Use the passed storeUrl parameter
       const authCredentials = {
-        url: formData.url,
+        url: storeUrl,
         authMethod: 'application',
         username: userLogin,
         appPassword: password
       };
+
+      console.log('=== SYNC CREDENTIALS ===');
+      console.log('URL:', authCredentials.url);
+      console.log('Auth method:', authCredentials.authMethod);
+      console.log('Username:', authCredentials.username);
+      console.log('Has app password:', !!authCredentials.appPassword);
 
       setCredentials(authCredentials);
       setSyncDetails('Authorization complete! Connecting to store...');
@@ -179,15 +206,22 @@ const App = () => {
         
         await new Promise(resolve => setTimeout(resolve, 800));
         setCurrentView('editor');
+        
+        // Clean up stored URL after successful sync
+        localStorage.removeItem('karoosync_oauth_url');
       } else {
         throw new Error(result.error || 'Store sync failed');
       }
     } catch (err) {
+      console.error('OAuth sync error:', err);
       setSyncStatus('error');
       setError(err.message);
       setSyncProgress(0);
       await new Promise(resolve => setTimeout(resolve, 800));
       setCurrentView('form');
+      
+      // Clean up stored URL on error
+      localStorage.removeItem('karoosync_oauth_url');
     } finally {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
@@ -200,6 +234,11 @@ const App = () => {
     }
 
     setError('');
+    
+    // FIXED: Store the URL in localStorage before redirect
+    console.log('=== STORING URL FOR OAUTH ===', formData.url);
+    localStorage.setItem('karoosync_oauth_url', formData.url);
+    
     try {
       const result = await initializeAppPasswordAuth(formData.url);
       
@@ -207,9 +246,11 @@ const App = () => {
         setAuthUrl(result.authUrl);
         setShowAuthFlow(true);
       } else {
+        localStorage.removeItem('karoosync_oauth_url'); // Clean up on error
         setError(result.error);
       }
     } catch (err) {
+      localStorage.removeItem('karoosync_oauth_url'); // Clean up on error
       setError('Failed to initialize WordPress authorization: ' + err.message);
     }
   };
@@ -219,6 +260,8 @@ const App = () => {
     setShowAuthFlow(false);
     setAuthUrl('');
     setError('');
+    // Clean up any stored OAuth data when switching methods
+    localStorage.removeItem('karoosync_oauth_url');
   };
 
   const handleSubmit = async () => {
@@ -404,6 +447,8 @@ const App = () => {
     setHasExistingData(false);
     setDataCheckComplete(false);
     setCheckingData(false);
+    // Clean up any stored OAuth data
+    localStorage.removeItem('karoosync_oauth_url');
   };
 
   if (currentView === 'checking-data' || checkingData) {

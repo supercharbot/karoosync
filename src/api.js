@@ -1,7 +1,7 @@
 const API_ENDPOINT = process.env.REACT_APP_API_ENDPOINT || 'https://tmaob4c6n9.execute-api.ap-southeast-2.amazonaws.com/v1/sync';
 const OAUTH_REDIRECT_URI = process.env.REACT_APP_REDIRECT_URI || 
   (window.location.hostname === 'localhost' 
-    ? 'https://your-domain.com/oauth/callback'
+    ? 'https://karoosync.com/oauth/callback'
     : `${window.location.origin}/oauth/callback`);
 
 const handleApiResponse = async (response) => {
