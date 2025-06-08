@@ -59,6 +59,31 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
     }
   };
 
+  const handleFileUpload = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let file of files) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        alert(`File ${file.name} is too large (max 5MB)`);
+        continue;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setEditData(prev => ({
+          ...prev,
+          images: [...prev.images, { src: e.target.result, file: true }]
+        }));
+        setActiveImageIndex(editData.images.length);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Clear input
+    e.target.value = '';
+  };
+
   const handleImageDelete = (index) => {
     setEditData(prev => {
       const newImages = prev.images.filter((_, i) => i !== index);
@@ -296,12 +321,32 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Product Images</label>
             
-            {/* Add Image URL */}
-            <div className="mb-4">
+            {/* Upload Methods */}
+            <div className="mb-4 space-y-3">
+              {/* File Upload */}
+              <div>
+                <label className="block w-full cursor-pointer">
+                  <div className="px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 transition-colors bg-gray-50 hover:bg-blue-50">
+                    <div className="flex items-center justify-center gap-2">
+                      <Upload className="w-5 h-5 text-gray-500" />
+                      <span className="text-sm text-gray-700">Upload image files (max 5MB each)</span>
+                    </div>
+                  </div>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    multiple
+                    className="sr-only"
+                  />
+                </label>
+              </div>
+
+              {/* URL Input */}
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Enter image URL and press Enter"
+                  placeholder="Or enter image URL and press Enter"
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && e.target.value) {
                       handleImageAdd(e.target.value);
@@ -355,8 +400,15 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
                           Featured
                         </span>
                       )}
+                      {image.file && (
+                        <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs">
+                          Uploaded
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs text-gray-500 truncate mt-1">{image.src}</p>
+                    <p className="text-xs text-gray-500 truncate mt-1">
+                      {image.file ? 'Uploaded file' : image.src}
+                    </p>
                   </div>
                   <button
                     onClick={() => handleImageDelete(index)}
