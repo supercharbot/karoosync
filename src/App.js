@@ -40,12 +40,16 @@ const App = () => {
     setCurrentView('syncing');
 
     try {
-      // Extract store URL from referrer or sessionStorage
-      const storeUrl = sessionStorage.getItem('karoosync_store_url') || 
-                      document.referrer.split('/')[2];
+      // Extract store URL from URL parameters (we'll add this to the auth flow)
+      const urlParams = new URLSearchParams(window.location.search);
+      const storeUrl = urlParams.get('store_url') || 
+                       sessionStorage.getItem('karoosync_store_url');
+
+      console.log('OAuth return - Store URL:', storeUrl);
+      console.log('OAuth return - User Login:', userLogin);
 
       if (!storeUrl) {
-        throw new Error('Store URL not found');
+        throw new Error('Store URL not found. Please start the connection process again.');
       }
 
       const credentials = {
@@ -53,6 +57,8 @@ const App = () => {
         username: userLogin,
         appPassword: password
       };
+
+      console.log('Attempting sync with credentials for:', credentials.url);
 
       const authToken = await getAuthToken();
       const result = await syncWordPressStore(credentials, authToken);
@@ -65,6 +71,7 @@ const App = () => {
         throw new Error(result.error || 'Store sync failed');
       }
     } catch (err) {
+      console.error('OAuth return error:', err);
       setError(err.message);
       setCurrentView('sync');
     } finally {

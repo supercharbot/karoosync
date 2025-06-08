@@ -23,6 +23,9 @@ const SyncForm = ({ onSyncComplete, error, setError }) => {
     setIsConnecting(true);
     
     try {
+      // Store URL in sessionStorage for OAuth return
+      sessionStorage.setItem('karoosync_store_url', storeUrl);
+      
       const authToken = await getAuthToken();
       const result = await initializeWordPressAuth(storeUrl, authToken);
       
