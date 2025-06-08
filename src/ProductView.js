@@ -31,6 +31,12 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
     setSaving(true);
     setSaveStatus('Saving...');
     
+    // Check for uploaded files
+    const hasUploadedFiles = editData.images.some(img => img.file);
+    if (hasUploadedFiles) {
+      setSaveStatus('Note: Uploaded files are not saved to WooCommerce (URL images only)');
+    }
+    
     try {
       const authToken = await getAuthToken();
       const result = await updateProduct(product.id, editData, authToken);
