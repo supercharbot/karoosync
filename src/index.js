@@ -4,7 +4,6 @@ import './index.css';
 import App from './App';
 import { AuthProvider } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
-import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -16,5 +15,3 @@ root.render(
     </AuthProvider>
   </React.StrictMode>
 );
-
-reportWebVitals();

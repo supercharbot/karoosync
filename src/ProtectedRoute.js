@@ -1,42 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Authenticator } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
-import { useAuth } from './AuthContext';
 import { Store } from 'lucide-react';
+import { useAuth } from './AuthContext';
+
+const UserWrapper = ({ user, children }) => {
+  const { setUser } = useAuth();
+
+  React.useEffect(() => {
+    if (user) {
+      setUser(user);
+    }
+  }, [user, setUser]);
+
+  return children;
+};
 
 const ProtectedRoute = ({ children }) => {
-  const { setAuthenticatedUser } = useAuth();
-  const [authenticatedUser, setAuthenticatedUserState] = useState(null);
-
-  // When we get a user from Authenticator, update AuthContext
-  useEffect(() => {
-    if (authenticatedUser) {
-      console.log('🔄 Authenticator confirmed user, setting in AuthContext...');
-      setAuthenticatedUser(authenticatedUser);
-    }
-  }, [authenticatedUser, setAuthenticatedUser]);
 
   return (
     <Authenticator
       formFields={{
         signUp: {
-          email: {
-            order: 1,
-            isRequired: true,
-          },
-          name: {
-            order: 2,
-            isRequired: true,
-            label: 'Full Name'
-          },
-          password: {
-            order: 3,
-            isRequired: true,
-          },
-          confirm_password: {
-            order: 4,
-            isRequired: true,
-          }
+          email: { order: 1, isRequired: true },
+          name: { order: 2, isRequired: true, label: 'Full Name' },
+          password: { order: 3, isRequired: true },
+          confirm_password: { order: 4, isRequired: true }
         }
       }}
       components={{
@@ -54,13 +43,7 @@ const ProtectedRoute = ({ children }) => {
       }}
     >
       {({ user }) => {
-        // Update our local state when Authenticator gives us a user
-        if (user && user !== authenticatedUser) {
-          setAuthenticatedUserState(user);
-        }
-
-        // Only render children if we have a user
-        return user ? children : null;
+        return user ? <UserWrapper user={user}>{children}</UserWrapper> : null;
       }}
     </Authenticator>
   );
