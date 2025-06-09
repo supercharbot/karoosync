@@ -3,7 +3,7 @@ import { useAuth } from './AuthContext';
 import { checkUserData, syncWordPressStore } from './api';
 import LoadingScreen from './LoadingScreen';
 import SyncForm from './SyncForm';
-import ProductEditor from './ProductEditor';
+import MainLayout from './MainLayout';
 
 const App = () => {
   const { user, getAuthToken } = useAuth();
@@ -65,7 +65,7 @@ const App = () => {
       
       if (result.success) {
         setUserData(result);
-        setCurrentView('editor');
+        setCurrentView('main');
         sessionStorage.removeItem('karoosync_store_url');
       } else {
         throw new Error(result.error || 'Store sync failed');
@@ -86,7 +86,7 @@ const App = () => {
       
       if (result.success && result.hasData) {
         setUserData(result);
-        setCurrentView('editor');
+        setCurrentView('main');
       } else {
         setCurrentView('sync');
       }
@@ -98,7 +98,7 @@ const App = () => {
 
   const handleSyncComplete = (syncResult) => {
     setUserData(syncResult);
-    setCurrentView('editor');
+    setCurrentView('main');
   };
 
   const handleReset = () => {
@@ -125,9 +125,9 @@ const App = () => {
     );
   }
 
-  if (currentView === 'editor' && userData) {
+  if (currentView === 'main' && userData) {
     return (
-      <ProductEditor 
+      <MainLayout 
         userData={userData}
         onReset={handleReset}
       />

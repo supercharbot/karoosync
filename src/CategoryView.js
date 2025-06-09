@@ -41,59 +41,42 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     const categories = userData?.metadata?.categories || [];
     const hasUncategorized = userData?.availableCategories?.includes('uncategorized');
 
+    // Sort categories by product count (most to least)
+    const sortedCategories = [...categories].sort((a, b) => (b.count || 0) - (a.count || 0));
+
     return (
       <div className="p-6">
         <h2 className="text-xl font-semibold text-gray-800 mb-6">
           Categories ({categories.length + (hasUncategorized ? 1 : 0)})
         </h2>
         
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+        <div className="space-y-3">
           {/* Uncategorized */}
           {hasUncategorized && (
             <div
               onClick={() => onCategorySelect({ name: 'Uncategorized', key: 'uncategorized' })}
-              className="group bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-all hover:translate-y-[-2px]"
+              className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all"
             >
-              <div className="relative aspect-square bg-gray-100 flex items-center justify-center">
-                <Package className="w-16 h-16 text-gray-400" />
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <span className="px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded">
-                      Open
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="p-4">
+              <div className="flex justify-between items-center">
                 <h3 className="font-medium text-gray-900">Uncategorized</h3>
-                <p className="text-sm text-gray-500 mt-1">Products without categories</p>
+                <span className="text-sm text-gray-500">Products without categories</span>
               </div>
             </div>
           )}
 
           {/* Categories */}
-          {categories.map((category) => (
+          {sortedCategories.map((category) => (
             <div
               key={category.id}
               onClick={() => onCategorySelect({ 
                 name: category.name, 
                 key: `category-${category.id}` 
               })}
-              className="group bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-all hover:translate-y-[-2px]"
+              className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all"
             >
-              <div className="relative aspect-square bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
-                <Folder className="w-16 h-16 text-blue-600" />
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <span className="px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded">
-                      Open
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="p-4">
-                <h3 className="font-medium text-gray-900 line-clamp-2">{category.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">{category.count || 0} products</p>
+              <div className="flex justify-between items-center">
+                <h3 className="font-medium text-gray-900">{category.name}</h3>
+                <span className="text-sm text-gray-500">{category.count || 0} products</span>
               </div>
             </div>
           ))}

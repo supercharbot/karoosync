@@ -67,7 +67,6 @@ const ProductEditor = ({ userData, onReset }) => {
             {renderNavigation()}
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">Welcome, {user?.username}</span>
             <button
               onClick={() => window.location.reload()}
               className="px-4 py-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors flex items-center"
