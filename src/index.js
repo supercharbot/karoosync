@@ -4,7 +4,6 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App';
 import { AuthProvider } from './AuthContext';
-import { ThemeProvider } from './ThemeContext';
 import ProtectedRoute from './ProtectedRoute';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -15,13 +14,11 @@ if (window.location.pathname.startsWith('/app')) {
   root.render(
     <React.StrictMode>
       <BrowserRouter basename="/app">
-        <ThemeProvider>
-          <AuthProvider>
-            <ProtectedRoute>
-              <App />
-            </ProtectedRoute>
-          </AuthProvider>
-        </ThemeProvider>
+        <AuthProvider>
+          <ProtectedRoute>
+            <App />
+          </ProtectedRoute>
+        </AuthProvider>
       </BrowserRouter>
     </React.StrictMode>
   );

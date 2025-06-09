@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import { ThemeProvider } from './ThemeContext'; // Import here instead
 import { checkUserData, syncWordPressStore } from './api';
 import LoadingScreen from './LoadingScreen';
 import SyncForm from './SyncForm';
@@ -107,6 +108,7 @@ const App = () => {
     setError('');
   };
 
+  // Wrap everything in ThemeProvider AFTER user is authenticated
   if (currentView === 'checking') {
     return <LoadingScreen message="Checking your data..." />;
   }
@@ -115,26 +117,29 @@ const App = () => {
     return <LoadingScreen message="Processing WordPress authorization..." />;
   }
 
-  if (currentView === 'sync') {
-    return (
-      <SyncForm 
-        onSyncComplete={handleSyncComplete}
-        error={error}
-        setError={setError}
-      />
-    );
-  }
+  // Now that user is authenticated, wrap in ThemeProvider
+  return (
+    <ThemeProvider>
+      {currentView === 'sync' && (
+        <SyncForm 
+          onSyncComplete={handleSyncComplete}
+          error={error}
+          setError={setError}
+        />
+      )}
 
-  if (currentView === 'main' && userData) {
-    return (
-      <MainLayout 
-        userData={userData}
-        onReset={handleReset}
-      />
-    );
-  }
+      {currentView === 'main' && userData && (
+        <MainLayout 
+          userData={userData}
+          onReset={handleReset}
+        />
+      )}
 
-  return <LoadingScreen message="Loading..." />;
+      {!['sync', 'main'].includes(currentView) && (
+        <LoadingScreen message="Loading..." />
+      )}
+    </ThemeProvider>
+  );
 };
 
 export default App;

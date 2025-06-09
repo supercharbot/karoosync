@@ -8,6 +8,7 @@ Amplify.configure({
     Cognito: {
       userPoolId: process.env.REACT_APP_COGNITO_USER_POOL_ID,
       userPoolClientId: process.env.REACT_APP_COGNITO_CLIENT_ID,
+      identityPoolId: 'ap-southeast-2:d327032f-0420-4764-aba0-141c6c16044e',
       loginWith: {
         email: true
       }
