@@ -6,14 +6,60 @@ import { updateProduct } from './api';
 const ProductView = ({ product, onBack, onProductUpdate }) => {
   const { getAuthToken } = useAuth();
   const [editData, setEditData] = useState({
+    // Basic Information
     name: product.name || '',
+    slug: product.slug || '',
     description: product.description || '',
     short_description: product.short_description || '',
+    status: product.status || 'publish',
+    catalog_visibility: product.catalog_visibility || 'visible',
+    featured: product.featured || false,
+    type: product.type || 'simple',
+    virtual: product.virtual || false,
+    downloadable: product.downloadable || false,
+    
+    // Pricing
     regular_price: product.regular_price || '',
     sale_price: product.sale_price || '',
+    date_on_sale_from: product.date_on_sale_from || '',
+    date_on_sale_to: product.date_on_sale_to || '',
+    
+    // Inventory
     sku: product.sku || '',
+    manage_stock: product.manage_stock || false,
     stock_quantity: product.stock_quantity || '',
     stock_status: product.stock_status || 'instock',
+    backorders: product.backorders || 'no',
+    sold_individually: product.sold_individually || false,
+    
+    // Shipping
+    weight: product.weight || '',
+    dimensions: {
+      length: product.dimensions?.length || '',
+      width: product.dimensions?.width || '',
+      height: product.dimensions?.height || ''
+    },
+    shipping_class: product.shipping_class || '',
+    
+    // External Product
+    external_url: product.external_url || '',
+    button_text: product.button_text || '',
+    
+    // Categories and Tags
+    categories: product.categories || [],
+    tags: product.tags || [],
+    
+    // Advanced
+    reviews_allowed: product.reviews_allowed !== false,
+    purchase_note: product.purchase_note || '',
+    menu_order: product.menu_order || 0,
+    
+    // Downloadable
+    downloads: product.downloads || [],
+    download_limit: product.download_limit || -1,
+    download_expiry: product.download_expiry || -1,
+    
+    // Images
     images: product.images || []
   });
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -21,10 +67,21 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
   const [saveStatus, setSaveStatus] = useState('');
 
   const handleInputChange = (field, value) => {
-    setEditData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    if (field.includes('.')) {
+      const [parent, child] = field.split('.');
+      setEditData(prev => ({
+        ...prev,
+        [parent]: {
+          ...prev[parent],
+          [child]: value
+        }
+      }));
+    } else {
+      setEditData(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }
   };
 
   const handleSave = async () => {
@@ -207,6 +264,12 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
                   <span className="font-medium">Stock:</span> {editData.stock_status === 'instock' ? 'In Stock' : 'Out of Stock'}
                   {editData.stock_quantity && ` (${editData.stock_quantity} available)`}
                 </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="font-medium">Status:</span> {editData.status}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="font-medium">Type:</span> {editData.type}
+                </p>
               </div>
             </div>
           </div>
@@ -247,21 +310,118 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Basic Information</h3>
             
-            {/* Product Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Product Name
-              </label>
-              <input
-                type="text"
-                value={editData.name}
-                onChange={(e) => handleInputChange('name', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                placeholder="Enter product name"
-              />
+            {/* Product Name & Slug */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Product Name *
+                </label>
+                <input
+                  type="text"
+                  value={editData.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                  placeholder="Enter product name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Slug
+                </label>
+                <input
+                  type="text"
+                  value={editData.slug}
+                  onChange={(e) => handleInputChange('slug', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="product-slug"
+                />
+              </div>
             </div>
 
-            {/* Prices */}
+            {/* Status & Visibility */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Status
+                </label>
+                <select
+                  value={editData.status}
+                  onChange={(e) => handleInputChange('status', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="publish">Published</option>
+                  <option value="draft">Draft</option>
+                  <option value="private">Private</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Catalog Visibility
+                </label>
+                <select
+                  value={editData.catalog_visibility}
+                  onChange={(e) => handleInputChange('catalog_visibility', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="visible">Visible</option>
+                  <option value="catalog">Catalog Only</option>
+                  <option value="search">Search Only</option>
+                  <option value="hidden">Hidden</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Product Type
+                </label>
+                <select
+                  value={editData.type}
+                  onChange={(e) => handleInputChange('type', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="simple">Simple</option>
+                  <option value="grouped">Grouped</option>
+                  <option value="external">External</option>
+                  <option value="variable">Variable</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Product Flags */}
+            <div className="flex flex-wrap gap-6">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={editData.featured}
+                  onChange={(e) => handleInputChange('featured', e.target.checked)}
+                  className="mr-2 w-4 h-4 text-blue-600 rounded"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Featured Product</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={editData.virtual}
+                  onChange={(e) => handleInputChange('virtual', e.target.checked)}
+                  className="mr-2 w-4 h-4 text-blue-600 rounded"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Virtual</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={editData.downloadable}
+                  onChange={(e) => handleInputChange('downloadable', e.target.checked)}
+                  className="mr-2 w-4 h-4 text-blue-600 rounded"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Downloadable</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Pricing */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Pricing</h3>
+            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -288,25 +448,94 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
                 />
               </div>
             </div>
+
+            {/* Sale Dates */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Sale Start Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editData.date_on_sale_from}
+                  onChange={(e) => handleInputChange('date_on_sale_from', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Sale End Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editData.date_on_sale_to}
+                  onChange={(e) => handleInputChange('date_on_sale_to', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+            </div>
+
+            {/* External Product Fields */}
+            {editData.type === 'external' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    External URL
+                  </label>
+                  <input
+                    type="url"
+                    value={editData.external_url}
+                    onChange={(e) => handleInputChange('external_url', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    placeholder="https://example.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Button Text
+                  </label>
+                  <input
+                    type="text"
+                    value={editData.button_text}
+                    onChange={(e) => handleInputChange('button_text', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    placeholder="Buy Now"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Inventory */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Inventory</h3>
             
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                SKU
+              </label>
+              <input
+                type="text"
+                value={editData.sku}
+                onChange={(e) => handleInputChange('sku', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="Product SKU"
+              />
+            </div>
+
+            <div className="flex items-center mb-4">
+              <input
+                type="checkbox"
+                checked={editData.manage_stock}
+                onChange={(e) => handleInputChange('manage_stock', e.target.checked)}
+                className="mr-2 w-4 h-4 text-blue-600 rounded"
+              />
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Manage Stock
+              </label>
+            </div>
+            
             <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  SKU
-                </label>
-                <input
-                  type="text"
-                  value={editData.sku}
-                  onChange={(e) => handleInputChange('sku', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  placeholder="Product SKU"
-                />
-              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Stock Status
@@ -323,7 +552,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Quantity
+                  Stock Quantity
                 </label>
                 <input
                   type="number"
@@ -331,7 +560,157 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
                   onChange={(e) => handleInputChange('stock_quantity', e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   placeholder="0"
+                  disabled={!editData.manage_stock}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Backorders
+                </label>
+                <select
+                  value={editData.backorders}
+                  onChange={(e) => handleInputChange('backorders', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  disabled={!editData.manage_stock}
+                >
+                  <option value="no">Do not allow</option>
+                  <option value="notify">Allow, but notify customer</option>
+                  <option value="yes">Allow</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                checked={editData.sold_individually}
+                onChange={(e) => handleInputChange('sold_individually', e.target.checked)}
+                className="mr-2 w-4 h-4 text-blue-600 rounded"
+              />
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Sold Individually (limit to 1 per order)
+              </label>
+            </div>
+          </div>
+
+          {/* Shipping */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Shipping</h3>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Weight (kg)
+                </label>
+                <input
+                  type="text"
+                  value={editData.weight}
+                  onChange={(e) => handleInputChange('weight', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Shipping Class
+                </label>
+                <input
+                  type="text"
+                  value={editData.shipping_class}
+                  onChange={(e) => handleInputChange('shipping_class', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="Enter shipping class"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Dimensions (cm)
+              </label>
+              <div className="grid grid-cols-3 gap-4">
+                <input
+                  type="text"
+                  value={editData.dimensions.length}
+                  onChange={(e) => handleInputChange('dimensions.length', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="Length"
+                />
+                <input
+                  type="text"
+                  value={editData.dimensions.width}
+                  onChange={(e) => handleInputChange('dimensions.width', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="Width"
+                />
+                <input
+                  type="text"
+                  value={editData.dimensions.height}
+                  onChange={(e) => handleInputChange('dimensions.height', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="Height"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Categories & Tags */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Categories & Tags</h3>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Categories
+              </label>
+              <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-700 min-h-[80px]">
+                {editData.categories.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {editData.categories.map((category, index) => (
+                      <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400">
+                        {category.name}
+                        <button
+                          onClick={() => {
+                            const newCategories = editData.categories.filter((_, i) => i !== index);
+                            handleInputChange('categories', newCategories);
+                          }}
+                          className="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400 text-center">No categories assigned</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Tags
+              </label>
+              <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-700 min-h-[80px]">
+                {editData.tags.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {editData.tags.map((tag, index) => (
+                      <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400">
+                        {tag.name}
+                        <button
+                          onClick={() => {
+                            const newTags = editData.tags.filter((_, i) => i !== index);
+                            handleInputChange('tags', newTags);
+                          }}
+                          className="ml-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400 text-center">No tags assigned</p>
+                )}
               </div>
             </div>
           </div>
@@ -365,6 +744,79 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
                 placeholder="Detailed product description with features, benefits..."
               />
             </div>
+          </div>
+
+          {/* Advanced Settings */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Advanced Settings</h3>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Purchase Note
+              </label>
+              <textarea
+                value={editData.purchase_note}
+                onChange={(e) => handleInputChange('purchase_note', e.target.value)}
+                rows={3}
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="Note to customer after purchase"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Menu Order
+              </label>
+              <input
+                type="number"
+                value={editData.menu_order}
+                onChange={(e) => handleInputChange('menu_order', parseInt(e.target.value) || 0)}
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="0"
+              />
+            </div>
+
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                checked={editData.reviews_allowed}
+                onChange={(e) => handleInputChange('reviews_allowed', e.target.checked)}
+                className="mr-2 w-4 h-4 text-blue-600 rounded"
+              />
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Enable Reviews
+              </label>
+            </div>
+
+            {/* Downloadable Product Settings */}
+            {editData.downloadable && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Download Limit
+                  </label>
+                  <input
+                    type="number"
+                    value={editData.download_limit}
+                    onChange={(e) => handleInputChange('download_limit', parseInt(e.target.value) || -1)}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    placeholder="-1 for unlimited"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Download Expiry (days)
+                  </label>
+                  <input
+                    type="number"
+                    value={editData.download_expiry}
+                    onChange={(e) => handleInputChange('download_expiry', parseInt(e.target.value) || -1)}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    placeholder="-1 for no expiry"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Images */}

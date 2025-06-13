@@ -3,16 +3,19 @@ import { ArrowLeft, Image, Search, X, Plus } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { loadCategoryProducts } from './api';
 import LoadingScreen from './LoadingScreen';
+import CreateCategoryModal from './CreateCategoryModal';
 
-const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductSelect, onBack }) => {
+const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductSelect, onBack, onDataUpdate, parentCategoryName }) => {
   const { getAuthToken } = useAuth();
   const [products, setProducts] = useState([]);
+  const [childCategories, setChildCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchMode, setSearchMode] = useState('categories'); // 'categories' or 'all-products'
+  const [searchMode, setSearchMode] = useState('categories');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     if (selectedCategory) {
@@ -35,6 +38,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
       
       if (result.success) {
         setProducts(result.products || []);
+        setChildCategories(result.childCategories || []);
       } else {
         setError(result.error || 'Failed to load products');
       }
@@ -99,7 +103,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     const searchLower = term.toLowerCase();
 
     if (selectedCategory) {
-      // Search within current category only
       const filtered = products.filter(product => {
         const nameMatch = product.name?.toLowerCase().includes(searchLower);
         const skuMatch = product.sku?.toLowerCase().includes(searchLower);
@@ -108,7 +111,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
       setSearchResults(filtered);
       
     } else if (searchMode === 'categories') {
-      // Search categories
       const categories = userData?.metadata?.categories || [];
       const filtered = categories.filter(category => 
         category.name?.toLowerCase().includes(searchLower)
@@ -116,7 +118,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
       setSearchResults(filtered);
       
     } else if (searchMode === 'all-products') {
-      // Search all products
       const allProducts = await loadAllProducts();
       const filtered = allProducts.filter(product => {
         const nameMatch = product.name?.toLowerCase().includes(searchLower);
@@ -129,11 +130,16 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
 
   const handleProductClick = (product) => {
     if (product._categoryKey && !selectedCategory) {
-      // If searching all products from categories view, jump directly to product
       onProductSelect(product);
     } else {
-      // Normal product selection
       onProductSelect(product);
+    }
+  };
+
+  const handleCategoryCreated = (newCategory) => {
+    // Refresh data to show new category
+    if (onDataUpdate) {
+      onDataUpdate();
     }
   };
 
@@ -145,9 +151,10 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
       return products;
     }
     
-    const categories = userData?.metadata?.categories || [];
+    // Show only top-level categories (parent = 0)
+    const categories = userData?.metadata?.categories?.filter(cat => cat.parent === 0) || [];
     const hasUncategorized = userData?.availableCategories?.includes('uncategorized');
-    const sortedCategories = [...categories].sort((a, b) => (b.count || 0) - (a.count || 0));
+    const sortedCategories = [...categories].sort((a, b) => (b.productCount || 0) - (a.productCount || 0));
     
     if (hasUncategorized) {
       return [{ name: 'Uncategorized', key: 'uncategorized', isUncategorized: true }, ...sortedCategories];
@@ -157,22 +164,29 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
 
   const displayData = getDisplayData();
 
-  // Categories view
   if (!selectedCategory) {
     return (
       <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-73px)]">
-        {/* Header */}
+        <CreateCategoryModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onCategoryCreated={handleCategoryCreated}
+          parentCategories={userData?.metadata?.categories || []}
+        />
+        
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
             Categories ({userData?.metadata?.categories?.length + (userData?.availableCategories?.includes('uncategorized') ? 1 : 0) || 0})
           </h2>
-          <button className="inline-flex items-center px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors font-medium">
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors font-medium"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Create Category
           </button>
         </div>
 
-        {/* Search with Mode Toggle */}
         <div className="mb-6">
           <div className="flex gap-3 mb-3">
             <div className="relative flex-1 max-w-md">
@@ -199,7 +213,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
               )}
             </div>
             
-            {/* Search Mode Toggle */}
             <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700">
               <button
                 onClick={() => {
@@ -232,7 +245,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
             </div>
           </div>
           
-          {/* Search Info */}
           {searchTerm && (
             <p className="text-sm text-gray-600 dark:text-gray-400">
               <span className="font-medium">{displayData.length}</span> {searchMode === 'categories' ? 'categories' : 'products'} found
@@ -241,9 +253,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
           )}
         </div>
         
-        {/* Results Grid */}
         {searchMode === 'categories' || !searchTerm ? (
-          // Categories List
           <div className="space-y-3">
             {displayData.map((category) => (
               <div
@@ -255,7 +265,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
                   <div>
                     <h3 className="font-medium text-gray-900 dark:text-gray-100">{category.name}</h3>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {category.isUncategorized ? 'Products without categories' : `${category.count || 0} products`}
+                      {category.isUncategorized ? 'Products without categories' : `${category.productCount || category.count || 0} products`}
                     </span>
                   </div>
                 </div>
@@ -263,7 +273,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
             ))}
           </div>
         ) : (
-          // Products Grid (for all-products search)
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
             {displayData.map((product, index) => (
               <div
@@ -276,50 +285,37 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
                     <img
                       src={product.images[0].src}
                       alt={product.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
                     />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Image className="w-10 h-10 text-gray-300 dark:text-gray-600" />
-                    </div>
-                  )}
-                </div>
-                <div className="p-4">
-                  <h3 className="font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{product.name}</h3>
-                  <div className="flex items-baseline justify-between mt-2">
-                    <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                      ${product.price || product.regular_price || '0.00'}
-                    </p>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      product.stock_status === 'instock'
-                        ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400'
-                        : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-400'
-                    }`}>
-                      {product.stock_status === 'instock' ? 'In Stock' : 'Out of Stock'}
-                    </span>
+                  ) : null}
+                  <div className="absolute inset-0 flex items-center justify-center text-gray-400 dark:text-gray-500" style={{ display: product.images?.[0] ? 'none' : 'flex' }}>
+                    <Image className="w-12 h-12" />
                   </div>
-                  {/* Show category for cross-category search */}
+                </div>
+                <div className="p-3">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 text-sm leading-tight line-clamp-2 mb-1">
+                    {product.name}
+                  </h3>
                   {product._categoryName && (
-                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">
                       {product._categoryName}
                     </p>
                   )}
-                  {/* Show SKU if it matches search */}
-                  {searchTerm && product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      SKU: {product.sku}
-                    </p>
-                  )}
+                  <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                    ${product.regular_price || product.price || '0.00'}
+                  </p>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* No Results */}
-        {searchTerm && displayData.length === 0 && !searching && (
+        {displayData.length === 0 && searchTerm && (
           <div className="text-center py-12">
-            <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
               No {searchMode === 'categories' ? 'categories' : 'products'} found
             </h3>
@@ -332,14 +328,12 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     );
   }
 
-  // Products view (inside a category)
   if (loading) {
     return <LoadingScreen message={`Loading ${selectedCategory.name} products...`} />;
   }
 
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-73px)]">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center">
           <button
@@ -347,7 +341,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
             className="flex items-center text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors font-medium mr-4"
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
-            Back to Categories
+            Back to {parentCategoryName || 'Categories'}
           </button>
           <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
             {selectedCategory.name} ({(searchTerm ? displayData : products).length})
@@ -360,7 +354,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
         </button>
       </div>
 
-      {/* Search Bar */}
       <div className="mb-6">
         <div className="relative max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -387,37 +380,52 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
         </div>
         
         {searchTerm && (
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium">{displayData.length}</span> of{' '}
-            <span className="font-medium">{products.length}</span> products found
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+            <span className="font-medium">{displayData.length}</span> products found
           </p>
         )}
       </div>
 
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6">
-          <p className="text-red-700 dark:text-red-400">{error}</p>
+      {/* Child Categories (Folders) */}
+      {!searchTerm && childCategories.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Categories</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {childCategories.map((childCategory) => (
+              <div
+                key={childCategory.id}
+                onClick={() => onCategorySelect({ name: childCategory.name, key: `category-${childCategory.id}` })}
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600 transition-all group"
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mr-3 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/40 transition-colors">
+                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-gray-900 dark:text-gray-100 truncate">{childCategory.name}</h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{childCategory.productCount || 0} products</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* No Results */}
-      {searchTerm && displayData.length === 0 && (
-        <div className="text-center py-12">
-          <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-            No products found
-          </h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">
-            No products match "{searchTerm}" in {selectedCategory.name}
-          </p>
+      {/* Products Grid */}
+      {!searchTerm && products.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Products</h3>
         </div>
       )}
-      
-      {/* Products Grid */}
+
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
         {displayData.map((product, index) => (
           <div
-            key={`${selectedCategory.key}-${product.id}-${index}`}
+            key={`${product.id}-${index}`}
             onClick={() => onProductSelect(product)}
             className="group bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden cursor-pointer hover:shadow-md transition-all hover:translate-y-[-2px]"
           >
@@ -426,38 +434,45 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
                 <img
                   src={product.images[0].src}
                   alt={product.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
                 />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Image className="w-10 h-10 text-gray-300 dark:text-gray-600" />
-                </div>
-              )}
-            </div>
-            <div className="p-4">
-              <h3 className="font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{product.name}</h3>
-              <div className="flex items-baseline justify-between mt-2">
-                <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                  ${product.price || product.regular_price || '0.00'}
-                </p>
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  product.stock_status === 'instock'
-                    ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400'
-                    : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-400'
-                }`}>
-                  {product.stock_status === 'instock' ? 'In Stock' : 'Out of Stock'}
-                </span>
+              ) : null}
+              <div className="absolute inset-0 flex items-center justify-center text-gray-400 dark:text-gray-500" style={{ display: product.images?.[0] ? 'none' : 'flex' }}>
+                <Image className="w-12 h-12" />
               </div>
-              {/* Show SKU if it matches search */}
-              {searchTerm && product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  SKU: {product.sku}
-                </p>
-              )}
+            </div>
+            <div className="p-3">
+              <h3 className="font-medium text-gray-900 dark:text-gray-100 text-sm leading-tight line-clamp-2">
+                {product.name}
+              </h3>
+              <p className="text-sm font-semibold text-green-600 dark:text-green-400 mt-1">
+                ${product.regular_price || product.price || '0.00'}
+              </p>
             </div>
           </div>
         ))}
       </div>
+
+      {displayData.length === 0 && searchTerm && (
+        <div className="text-center py-12">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+            No products found
+          </h3>
+          <p className="text-gray-500 dark:text-gray-400">
+            No products match "{searchTerm}" in {selectedCategory.name}
+          </p>
+        </div>
+      )}
+
+      {error && (
+        <div className="p-4 rounded-lg bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
+          {error}
+        </div>
+      )}
     </div>
   );
 };

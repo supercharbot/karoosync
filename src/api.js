@@ -81,3 +81,26 @@ export async function updateProduct(productId, productData, authToken) {
 
   return result;
 }
+
+export async function createCategory(categoryData, authToken) {
+  console.log('Creating category:', categoryData.name);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=create-category`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(categoryData)
+  });
+
+  return result;
+}
+
+export async function deleteCategory(categoryId, authToken) {
+  console.log(`Deleting category: ${categoryId}`);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=delete-category&categoryId=${categoryId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
