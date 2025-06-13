@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import CategoryView from './CategoryView';
 import ProductView from './ProductView';
+import { ChevronRight, Home } from 'lucide-react';
 
 const ProductEditor = ({ userData, onReset }) => {
   const [currentView, setCurrentView] = useState('categories');
@@ -66,43 +67,88 @@ const ProductEditor = ({ userData, onReset }) => {
     return path;
   };
 
+  // Navigate to specific breadcrumb level
+  const navigateToBreadcrumb = (index) => {
+    const breadcrumbs = getBreadcrumbPath();
+    
+    if (index === 0) {
+      // Navigate to root categories
+      setSelectedCategory(null);
+      setSelectedProduct(null);
+      setCategoryPath([]);
+      setCurrentView('categories');
+    } else if (index < breadcrumbs.length - 1) {
+      if (selectedProduct && index === breadcrumbs.length - 2) {
+        // Navigate back to products (from product view)
+        handleBackToProducts();
+      } else {
+        // Navigate to specific category in path
+        const targetPath = categoryPath.slice(0, index);
+        const targetCategory = index === 1 ? categoryPath[0] : categoryPath[index - 1];
+        setCategoryPath(targetPath);
+        setSelectedCategory(targetCategory);
+        setSelectedProduct(null);
+        setCurrentView('products');
+      }
+    }
+  };
+
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-73px)]">
+    <div className="bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-64px)] lg:min-h-[calc(100vh-73px)]">
       {/* Breadcrumb Navigation */}
       {(selectedCategory || selectedProduct) && (
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
-          <div className="text-sm">
-            {getBreadcrumbPath().map((item, index) => (
-              <span key={index}>
-                {index > 0 && <span className="mx-2 text-gray-400 dark:text-gray-500">/</span>}
-                {index === 0 ? (
-                  <button 
-                    className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
-                    onClick={() => {
-                      setSelectedCategory(null);
-                      setSelectedProduct(null);
-                      setCategoryPath([]);
-                      setCurrentView('categories');
-                    }}
-                  >
-                    {item}
-                  </button>
-                ) : index < getBreadcrumbPath().length - 1 ? (
-                  selectedProduct && index === getBreadcrumbPath().length - 2 ? (
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 lg:px-6 py-3">
+          <div className="flex items-center min-w-0">
+            {/* Mobile: Show only current and home */}
+            <div className="flex items-center lg:hidden">
+              <button 
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium flex items-center mr-2 flex-shrink-0"
+                onClick={() => navigateToBreadcrumb(0)}
+              >
+                <Home className="w-4 h-4" />
+              </button>
+              <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500 mx-1 flex-shrink-0" />
+              <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                {getBreadcrumbPath()[getBreadcrumbPath().length - 1]}
+              </span>
+            </div>
+
+            {/* Desktop: Show full breadcrumb path */}
+            <div className="hidden lg:flex items-center min-w-0 flex-wrap">
+              {getBreadcrumbPath().map((item, index) => (
+                <React.Fragment key={index}>
+                  {index > 0 && (
+                    <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500 mx-2 flex-shrink-0" />
+                  )}
+                  {index === 0 ? (
                     <button 
-                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
-                      onClick={handleBackToProducts}
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium truncate"
+                      onClick={() => {
+                        setSelectedCategory(null);
+                        setSelectedProduct(null);
+                        setCategoryPath([]);
+                        setCurrentView('categories');
+                      }}
                     >
                       {item}
                     </button>
+                  ) : index < getBreadcrumbPath().length - 1 ? (
+                    selectedProduct && index === getBreadcrumbPath().length - 2 ? (
+                      <button 
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium truncate"
+                        onClick={handleBackToProducts}
+                      >
+                        {item}
+                      </button>
+                    ) : (
+                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{item}</span>
+                    )
                   ) : (
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{item}</span>
-                  )
-                ) : (
-                  <span className="font-medium text-gray-900 dark:text-gray-100">{item}</span>
-                )}
-              </span>
-            ))}
+                    <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{item}</span>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
           </div>
         </div>
       )}
