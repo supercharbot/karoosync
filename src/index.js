@@ -5,13 +5,11 @@ import './index.css';
 import App from './App';
 import { AuthProvider } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
-import MarketingApp from './MarketingApp'; // Your new marketing component
+import MarketingApp from './MarketingApp';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
-// Check if we're on the app path
 if (window.location.pathname.startsWith('/app')) {
-  // Render the React app with /app basename
   root.render(
     <React.StrictMode>
       <BrowserRouter basename="/app">
@@ -24,7 +22,7 @@ if (window.location.pathname.startsWith('/app')) {
     </React.StrictMode>
   );
 } else {
-  // Render marketing site for all other paths
+  // Remove the redirect, just render marketing site
   root.render(
     <React.StrictMode>
       <BrowserRouter>
