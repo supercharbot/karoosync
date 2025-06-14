@@ -5,6 +5,7 @@ import './index.css';
 import App from './App';
 import { AuthProvider } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
+import MarketingApp from './MarketingApp'; // Your new marketing component
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
@@ -23,6 +24,12 @@ if (window.location.pathname.startsWith('/app')) {
     </React.StrictMode>
   );
 } else {
-  // Redirect to home page for all other paths
-  window.location.href = '/home';
+  // Render marketing site for all other paths
+  root.render(
+    <React.StrictMode>
+      <BrowserRouter>
+        <MarketingApp />
+      </BrowserRouter>
+    </React.StrictMode>
+  );
 }
