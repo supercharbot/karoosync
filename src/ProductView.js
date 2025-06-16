@@ -171,7 +171,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
   };
 
   return (
-    <div className="h-[calc(100vh-64px)] lg:h-[calc(100vh-73px)] flex flex-col lg:flex-row">
+    <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Mobile Tab Navigation */}
       <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="flex">
@@ -203,13 +203,13 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
       {/* Desktop Layout: Side by Side (preserved exactly) */}
       <div className="hidden lg:flex flex-1">
         {/* Left Panel - Product Preview (Desktop) */}
-        <div className="w-1/2 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-auto">
+        <div className="w-1/2 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           
           <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} />
         </div>
 
         {/* Right Panel - Editor (Desktop) */}
-        <div className="w-1/2 bg-gray-50 dark:bg-gray-900 overflow-auto">
+        <div className="w-1/2 bg-gray-50 dark:bg-gray-900">
           <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 z-10 flex justify-between items-center">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Edit Product</h2>
             <div className="flex items-center gap-3">
