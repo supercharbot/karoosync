@@ -200,57 +200,10 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
         </div>
       </div>
 
-      {/* Mobile Back Button */}
-      <div className="lg:hidden sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 z-10">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={onBack}
-            className="flex items-center text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors font-medium"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Products
-          </button>
-          
-          {activeTab === 'edit' && (
-            <div className="flex items-center gap-3">
-              {saveStatus && (
-                <span className={`text-sm px-3 py-1 rounded-full ${
-                  saveStatus.includes('Error') 
-                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' 
-                    : saveStatus.includes('Saving')
-                    ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400'
-                    : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
-                }`}>
-                  {saveStatus}
-                </span>
-              )}
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors flex items-center text-sm font-medium"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Desktop Layout: Side by Side (preserved exactly) */}
       <div className="hidden lg:flex flex-1">
         {/* Left Panel - Product Preview (Desktop) */}
         <div className="w-1/2 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-auto">
-          {/* Back Button Header */}
-          <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 z-10">
-            <button
-              onClick={onBack}
-              className="flex items-center text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors font-medium"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Products
-            </button>
-          </div>
           
           <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} />
         </div>

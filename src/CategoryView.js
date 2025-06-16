@@ -376,14 +376,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center">
-          <button
-            onClick={onBack}
-            className="flex items-center text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors font-medium mr-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-1" />
-            <span className="hidden sm:inline">Back to {parentCategoryName || 'Categories'}</span>
-            <span className="sm:hidden">Back</span>
-          </button>
+          
           <div>
             <h2 className="text-xl lg:text-2xl font-semibold text-gray-800 dark:text-gray-200">
               {selectedCategory.name}

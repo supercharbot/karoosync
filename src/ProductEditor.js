@@ -99,7 +99,7 @@ const ProductEditor = ({ userData, onReset }) => {
       {(selectedCategory || selectedProduct) && (
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 lg:px-6 py-3">
           <div className="flex items-center min-w-0">
-            {/* Mobile: Show only current and home */}
+            {/* Mobile: Show home, parent (if exists), and current */}
             <div className="flex items-center lg:hidden">
               <button 
                 className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium flex items-center mr-2 flex-shrink-0"
@@ -108,9 +108,27 @@ const ProductEditor = ({ userData, onReset }) => {
                 <Home className="w-4 h-4" />
               </button>
               <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500 mx-1 flex-shrink-0" />
-              <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                {getBreadcrumbPath()[getBreadcrumbPath().length - 1]}
-              </span>
+              
+              {getBreadcrumbPath().length > 2 ? (
+                // Show parent level as clickable when there are multiple levels
+                <>
+                  <button 
+                    className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium truncate"
+                    onClick={() => navigateToBreadcrumb(getBreadcrumbPath().length - 2)}
+                  >
+                    {getBreadcrumbPath()[getBreadcrumbPath().length - 2]}
+                  </button>
+                  <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500 mx-1 flex-shrink-0" />
+                  <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {getBreadcrumbPath()[getBreadcrumbPath().length - 1]}
+                  </span>
+                </>
+              ) : (
+                // Show only current level when at top level
+                <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                  {getBreadcrumbPath()[getBreadcrumbPath().length - 1]}
+                </span>
+              )}
             </div>
 
             {/* Desktop: Show full breadcrumb path */}
@@ -120,29 +138,13 @@ const ProductEditor = ({ userData, onReset }) => {
                   {index > 0 && (
                     <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500 mx-2 flex-shrink-0" />
                   )}
-                  {index === 0 ? (
+                  {index < getBreadcrumbPath().length - 1 ? (
                     <button 
                       className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium truncate"
-                      onClick={() => {
-                        setSelectedCategory(null);
-                        setSelectedProduct(null);
-                        setCategoryPath([]);
-                        setCurrentView('categories');
-                      }}
+                      onClick={() => navigateToBreadcrumb(index)}
                     >
                       {item}
                     </button>
-                  ) : index < getBreadcrumbPath().length - 1 ? (
-                    selectedProduct && index === getBreadcrumbPath().length - 2 ? (
-                      <button 
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium truncate"
-                        onClick={handleBackToProducts}
-                      >
-                        {item}
-                      </button>
-                    ) : (
-                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{item}</span>
-                    )
                   ) : (
                     <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{item}</span>
                   )}
