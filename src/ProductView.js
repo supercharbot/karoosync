@@ -248,31 +248,28 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
       </div>
 
       {/* Mobile Layout: Single Panel with Tabs */}
-      <div className="lg:hidden flex-1 overflow-auto">
+      <div className="lg:hidden flex-1">
         {activeTab === 'preview' ? (
-          <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} isMobile={true} />
+          <div className="overflow-auto h-[calc(100vh-200px)]">
+            <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} isMobile={true} />
+          </div>
         ) : (
-          <div className="relative">
-            <ProductEditor 
-              editData={editData} 
-              handleInputChange={handleInputChange}
-              handleImageAdd={handleImageAdd}
-              handleFileUpload={handleFileUpload}
-              handleImageDelete={handleImageDelete}
-              activeImageIndex={activeImageIndex}
-              setActiveImageIndex={setActiveImageIndex}
-              isMobile={true}
-            />
+          <div className="relative h-full">
+            <div className="overflow-auto h-[calc(100vh-250px)]">
+              <ProductEditor 
+                editData={editData} 
+                handleInputChange={handleInputChange}
+                handleImageAdd={handleImageAdd}
+                handleFileUpload={handleFileUpload}
+                handleImageDelete={handleImageDelete}
+                activeImageIndex={activeImageIndex}
+                setActiveImageIndex={setActiveImageIndex}
+                isMobile={true}
+              />
+            </div>
             {/* Mobile Save Button */}
             <div className="sticky bottom-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors flex items-center justify-center font-medium"
-              >
-                <Save className="w-5 h-5 mr-2" />
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
+              ...save button...
             </div>
           </div>
         )}
@@ -939,8 +936,8 @@ const ProductEditor = ({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {image.file ? 'Uploaded file (preview only)' : image.src}
+              <p className="text-xs text-gray-500 dark:text-gray-400 break-all overflow-hidden line-clamp-2 leading-tight">
+                {image.file ? image.file.name : image.src}
               </p>
             </div>
             <button
