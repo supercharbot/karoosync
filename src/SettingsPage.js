@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Save, 
   Globe, 
@@ -26,6 +26,305 @@ import {
   exportData 
 } from './api';
 import LoadingScreen from './LoadingScreen';
+
+// Move BackupModal outside the main component to prevent re-creation
+const BackupModal = React.memo(({ 
+  isVisible, 
+  onClose, 
+  backupName, 
+  setBackupName, 
+  currentBackup, 
+  isCreatingBackup, 
+  onCreateBackup 
+}) => {
+  if (!isVisible) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Create Product Backup
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            disabled={isCreatingBackup}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="space-y-4 mb-6">
+          {currentBackup.exists && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                <strong>Note:</strong> Creating a new backup will replace your existing backup from {currentBackup.date}.
+              </p>
+            </div>
+          )}
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Backup Name (Optional)
+            </label>
+            <input
+              type="text"
+              value={backupName}
+              onChange={(e) => setBackupName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Product Backup"
+              autoComplete="off"
+              disabled={isCreatingBackup}
+            />
+          </div>
+          
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              This backup will include all your products in comprehensive CSV format with {currentBackup.exists ? currentBackup.fieldCount || '38' : '38'} fields for easy viewing in Excel or Google Sheets.
+            </p>
+          </div>
+
+          {/* Loading Progress */}
+          {isCreatingBackup && (
+            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    Creating backup...
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Processing your products and generating CSV file
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <div className="bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                  <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: '70%' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={isCreatingBackup}
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isCreatingBackup ? 'Please wait...' : 'Cancel'}
+          </button>
+          <button
+            onClick={onCreateBackup}
+            disabled={isCreatingBackup}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {isCreatingBackup ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              currentBackup.exists ? 'Replace Backup' : 'Create Backup'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+BackupModal.displayName = 'BackupModal';
+
+// Move DownloadModal outside as well
+const DownloadModal = React.memo(({ 
+  isVisible, 
+  onClose, 
+  downloadFormat, 
+  setDownloadFormat, 
+  selectedDataTypes, 
+  setSelectedDataTypes, 
+  isDownloading, 
+  onExportData 
+}) => {
+  if (!isVisible) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Download Data Export
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="space-y-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Export Format
+            </label>
+            <select
+              value={downloadFormat}
+              onChange={(e) => setDownloadFormat(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >
+              <option value="json">JSON Format (Complete Data)</option>
+              <option value="csv">CSV Format (Comprehensive)</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Data to Export
+            </label>
+            <div className="space-y-2">
+              {[
+                { id: 'products', label: 'Products' },
+                { id: 'categories', label: 'Categories' }
+              ].map((item) => (
+                <label key={item.id} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedDataTypes.includes(item.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedDataTypes([...selectedDataTypes, item.id]);
+                      } else {
+                        setSelectedDataTypes(selectedDataTypes.filter(type => type !== item.id));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">
+                    {item.label}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+          
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              {downloadFormat === 'csv' 
+                ? 'CSV export will include 38 comprehensive fields for complete product data analysis.'
+                : 'JSON export will include all available data in structured format.'
+              }
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onExportData}
+            disabled={selectedDataTypes.length === 0 || isDownloading}
+            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {isDownloading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Preparing...
+              </>
+            ) : (
+              'Download Data'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+DownloadModal.displayName = 'DownloadModal';
+
+// Move DeleteAccountModal outside as well
+const DeleteAccountModal = React.memo(({ 
+  isVisible, 
+  onClose, 
+  deleteConfirmText, 
+  setDeleteConfirmText, 
+  isDeleting, 
+  onDeleteAccount 
+}) => {
+  if (!isVisible) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+        <div className="flex items-center mb-4">
+          <div className="flex-shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mr-4">
+            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Delete Account
+          </h3>
+        </div>
+        
+        <div className="mb-6">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            This action cannot be undone. This will permanently delete your account and remove all associated data including:
+          </p>
+          <ul className="text-sm text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1 mb-4">
+            <li>All product data and synchronization settings</li>
+            <li>Account preferences and configurations</li>
+            <li>All backups and stored information</li>
+            <li>Access to the KarooSync platform</li>
+          </ul>
+          <p className="text-sm text-red-600 dark:text-red-400 font-medium mb-4">
+            Type <strong>DELETE MY ACCOUNT</strong> to confirm:
+          </p>
+          <input
+            type="text"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            autoComplete="off"
+            autoFocus
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            placeholder="Type 'DELETE MY ACCOUNT'"
+          />
+        </div>
+        
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onDeleteAccount}
+            disabled={deleteConfirmText !== 'DELETE MY ACCOUNT' || isDeleting}
+            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              'Delete Account'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+DeleteAccountModal.displayName = 'DeleteAccountModal';
 
 const SettingsPage = () => {
   const { getAuthToken, logout } = useAuth();
@@ -62,8 +361,33 @@ const SettingsPage = () => {
     name: '',
     date: '',
     size: '',
-    status: ''
+    status: '',
+    productCount: 0,
+    fieldCount: 0
   });
+
+  // Function to load backup status
+  const loadBackupStatus = useCallback(async () => {
+    try {
+      const authToken = await getAuthToken();
+      const result = await getBackupStatus(authToken);
+      if (result.success && result.backup.exists) {
+        setCurrentBackup(result.backup);
+      } else {
+        setCurrentBackup({
+          exists: false,
+          name: '',
+          date: '',
+          size: '',
+          status: '',
+          productCount: 0,
+          fieldCount: 0
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load backup status:', error);
+    }
+  }, [getAuthToken]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -90,21 +414,9 @@ const SettingsPage = () => {
       }
     };
 
-    const loadBackupStatus = async () => {
-      try {
-        const authToken = await getAuthToken();
-        const result = await getBackupStatus(authToken);
-        if (result.success && result.backup.exists) {
-          setCurrentBackup(result.backup);
-        }
-      } catch (error) {
-        console.error('Failed to load backup status:', error);
-      }
-    };
-
     loadSettings();
     loadBackupStatus();
-  }, [currentTheme, getAuthToken]);
+  }, [currentTheme, loadBackupStatus]);
 
   const handleSettingChange = (key, value) => {
     setSettings(prev => ({
@@ -167,20 +479,32 @@ const SettingsPage = () => {
 
   const handleCreateBackup = async () => {
     setIsCreatingBackup(true);
+    
     try {
       const authToken = await getAuthToken();
       const result = await createBackup(backupName || 'Product Backup', authToken);
       
       if (result.success) {
+        // Immediately update the current backup state with the new backup
         setCurrentBackup(result.backup);
-        setOperationStatus('Backup created successfully!');
+        
+        // Close the modal and reset form
         setShowBackupModal(false);
         setBackupName('');
+        
+        // Clear any previous operation status
+        setOperationStatus('');
+        
+        // Optional: Show a brief success message (optional)
+        // setOperationStatus('Backup created successfully!');
+        // setTimeout(() => setOperationStatus(''), 3000);
       } else {
         setOperationStatus(`Error: ${result.error}`);
+        setTimeout(() => setOperationStatus(''), 5000);
       }
     } catch (error) {
       setOperationStatus(`Error: ${error.message}`);
+      setTimeout(() => setOperationStatus(''), 5000);
     } finally {
       setIsCreatingBackup(false);
     }
@@ -195,17 +519,20 @@ const SettingsPage = () => {
         // Create download link
         const link = document.createElement('a');
         link.href = result.downloadUrl;
-        link.download = `karoosync-backup-${new Date().toISOString().split('T')[0]}.json`;
+        link.download = result.filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         
         setOperationStatus('Backup download started...');
+        setTimeout(() => setOperationStatus(''), 3000);
       } else {
         setOperationStatus(`Error: ${result.error}`);
+        setTimeout(() => setOperationStatus(''), 5000);
       }
     } catch (error) {
       setOperationStatus(`Error: ${error.message}`);
+      setTimeout(() => setOperationStatus(''), 5000);
     }
   };
 
@@ -226,11 +553,14 @@ const SettingsPage = () => {
         
         setOperationStatus(`Data export started. Downloaded ${result.size}.`);
         setShowDownloadModal(false);
+        setTimeout(() => setOperationStatus(''), 5000);
       } else {
         setOperationStatus(`Error: ${result.error}`);
+        setTimeout(() => setOperationStatus(''), 5000);
       }
     } catch (error) {
       setOperationStatus(`Error: ${error.message}`);
+      setTimeout(() => setOperationStatus(''), 5000);
     } finally {
       setIsDownloading(false);
     }
@@ -249,247 +579,17 @@ const SettingsPage = () => {
         }, 2000);
       } else {
         setOperationStatus(`Error: ${result.error || 'Failed to delete account'}`);
+        setTimeout(() => setOperationStatus(''), 5000);
       }
     } catch (error) {
       setOperationStatus(`Error: ${error.message}`);
+      setTimeout(() => setOperationStatus(''), 5000);
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
       setDeleteConfirmText('');
     }
   };
-
-  // Delete Account Modal
-  const DeleteAccountModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
-        <div className="flex items-center mb-4">
-          <div className="flex-shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mr-4">
-            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Delete Account
-          </h3>
-        </div>
-        
-        <div className="mb-6">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            This action cannot be undone. This will permanently delete your account and remove all associated data including:
-          </p>
-          <ul className="text-sm text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1 mb-4">
-            <li>All product data and synchronization settings</li>
-            <li>Account preferences and configurations</li>
-            <li>All backups and stored information</li>
-            <li>Access to the KarooSync platform</li>
-          </ul>
-          <p className="text-sm text-red-600 dark:text-red-400 font-medium mb-4">
-            Type <strong>DELETE MY ACCOUNT</strong> to confirm:
-          </p>
-          <input
-            type="text"
-            value={deleteConfirmText}
-            onChange={(e) => setDeleteConfirmText(e.target.value)}
-            autoComplete="off"
-            autoFocus
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            placeholder="Type 'DELETE MY ACCOUNT'"
-          />
-        </div>
-        
-        <div className="flex gap-3">
-          <button
-            onClick={() => {
-              setShowDeleteConfirm(false);
-              setDeleteConfirmText('');
-            }}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleDeleteAccount}
-            disabled={deleteConfirmText !== 'DELETE MY ACCOUNT' || isDeleting}
-            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {isDeleting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Deleting...
-              </>
-            ) : (
-              'Delete Account'
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Backup Creation Modal
-  const BackupModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Create Product Backup
-          </h3>
-          <button
-            onClick={() => setShowBackupModal(false)}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        
-        <div className="space-y-4 mb-6">
-          {currentBackup.exists && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg">
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                <strong>Note:</strong> Creating a new backup will replace your existing backup from {currentBackup.date}.
-              </p>
-            </div>
-          )}
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Backup Name (Optional)
-            </label>
-            <input
-              type="text"
-              value={backupName}
-              onChange={(e) => setBackupName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              placeholder="Product Backup"
-            />
-          </div>
-          
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              This backup will include all your products, categories, tags, and current settings. 
-              You can download and restore this backup at any time.
-            </p>
-          </div>
-        </div>
-        
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowBackupModal(false)}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleCreateBackup}
-            disabled={isCreatingBackup}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {isCreatingBackup ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              currentBackup.exists ? 'Replace Backup' : 'Create Backup'
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Data Download Modal
-  const DownloadModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Download Data Export
-          </h3>
-          <button
-            onClick={() => setShowDownloadModal(false)}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        
-        <div className="space-y-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Export Format
-            </label>
-            <select
-              value={downloadFormat}
-              onChange={(e) => setDownloadFormat(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            >
-              <option value="json">JSON Format</option>
-              <option value="csv">CSV Format</option>
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Data to Export
-            </label>
-            <div className="space-y-2">
-              {[
-                { id: 'products', label: 'Products' },
-                { id: 'categories', label: 'Categories' }
-              ].map((item) => (
-                <label key={item.id} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={selectedDataTypes.includes(item.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedDataTypes([...selectedDataTypes, item.id]);
-                      } else {
-                        setSelectedDataTypes(selectedDataTypes.filter(type => type !== item.id));
-                      }
-                    }}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                  />
-                  <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">
-                    {item.label}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-          
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              Your data export will be prepared and downloaded as a file containing the selected data in your chosen format.
-            </p>
-          </div>
-        </div>
-        
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowDownloadModal(false)}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleExportData}
-            disabled={selectedDataTypes.length === 0 || isDownloading}
-            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {isDownloading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Preparing...
-              </>
-            ) : (
-              'Download Data'
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
   const ConfirmDialog = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -558,9 +658,40 @@ const SettingsPage = () => {
   return (
     <div className="p-6 max-w-4xl mx-auto bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-73px)]">
       {showConfirmDialog && <ConfirmDialog />}
-      {showDeleteConfirm && <DeleteAccountModal />}
-      {showBackupModal && <BackupModal />}
-      {showDownloadModal && <DownloadModal />}
+      
+      {/* Use the external components with props */}
+      <DeleteAccountModal 
+        isVisible={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDeleteConfirmText('');
+        }}
+        deleteConfirmText={deleteConfirmText}
+        setDeleteConfirmText={setDeleteConfirmText}
+        isDeleting={isDeleting}
+        onDeleteAccount={handleDeleteAccount}
+      />
+      
+      <BackupModal 
+        isVisible={showBackupModal}
+        onClose={() => setShowBackupModal(false)}
+        backupName={backupName}
+        setBackupName={setBackupName}
+        currentBackup={currentBackup}
+        isCreatingBackup={isCreatingBackup}
+        onCreateBackup={handleCreateBackup}
+      />
+      
+      <DownloadModal 
+        isVisible={showDownloadModal}
+        onClose={() => setShowDownloadModal(false)}
+        downloadFormat={downloadFormat}
+        setDownloadFormat={setDownloadFormat}
+        selectedDataTypes={selectedDataTypes}
+        setSelectedDataTypes={setSelectedDataTypes}
+        isDownloading={isDownloading}
+        onExportData={handleExportData}
+      />
       
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Settings</h1>
@@ -652,11 +783,11 @@ const SettingsPage = () => {
                     </h3>
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Download your product data and categories in JSON or CSV format for backup or migration purposes.
+                    Download your product data and categories in JSON or comprehensive CSV format for backup or migration purposes.
                   </p>
                   <div className="flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
-                    <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">JSON</span>
-                    <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">CSV</span>
+                    <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">JSON (Complete)</span>
+                    <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">CSV (38 Fields)</span>
                   </div>
                 </div>
                 <button
@@ -680,15 +811,25 @@ const SettingsPage = () => {
                     </h3>
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Create a secure backup of all your products that can be restored if needed.
+                    Create a comprehensive CSV backup of all your products with {currentBackup.fieldCount || '38'} fields that can be opened in Excel or Google Sheets.
                   </p>
                 </div>
                 <button
                   onClick={() => setShowBackupModal(true)}
-                  className="ml-4 inline-flex items-center px-4 py-2 border border-blue-300 dark:border-blue-600 text-sm font-medium rounded-lg text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                  disabled={isCreatingBackup}
+                  className="ml-4 inline-flex items-center px-4 py-2 border border-blue-300 dark:border-blue-600 text-sm font-medium rounded-lg text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors disabled:opacity-50"
                 >
-                  <Archive className="w-4 h-4 mr-2" />
-                  {currentBackup.exists ? 'Update Backup' : 'Create Backup'}
+                  {isCreatingBackup ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Archive className="w-4 h-4 mr-2" />
+                      {currentBackup.exists ? 'Update Backup' : 'Create Backup'}
+                    </>
+                  )}
                 </button>
               </div>
               
@@ -702,7 +843,7 @@ const SettingsPage = () => {
                       <div>
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{currentBackup.name}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Created on {currentBackup.date} • {currentBackup.size}
+                          Created on {currentBackup.date} • {currentBackup.size} • {currentBackup.productCount} products • {currentBackup.fieldCount} fields
                         </p>
                       </div>
                     </div>
@@ -724,7 +865,7 @@ const SettingsPage = () => {
                 <div className="mt-4 text-center py-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
                   <Archive className="w-8 h-8 mx-auto text-gray-400 mb-2" />
                   <p className="text-sm text-gray-500 dark:text-gray-400">No backup created yet</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">Create your first backup to secure your product data</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Create your first comprehensive backup to secure your product data</p>
                 </div>
               )}
             </div>
