@@ -104,3 +104,67 @@ export async function deleteCategory(categoryId, authToken) {
 
   return result;
 }
+
+// ============================================
+// NEW ACCOUNT MANAGEMENT FUNCTIONS
+// ============================================
+
+export async function deleteAccount(authToken) {
+  console.log('Deleting account...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=delete-account`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
+export async function createBackup(backupName, authToken) {
+  console.log('Creating backup:', backupName);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=create-backup`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({
+      backupName: backupName || 'Product Backup'
+    })
+  });
+
+  return result;
+}
+
+export async function getBackupStatus(authToken) {
+  console.log('Getting backup status...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=backup-status`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
+export async function downloadBackup(authToken) {
+  console.log('Downloading backup...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=download-backup`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
+export async function exportData(format, dataTypes, authToken) {
+  console.log('Exporting data:', format, dataTypes);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=export-data`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({
+      format: format,
+      dataTypes: dataTypes
+    })
+  });
+
+  return result;
+}
