@@ -1,4 +1,4 @@
-const API_ENDPOINT = process.env.REACT_APP_API_ENDPOINT || 'https://tmaob4c6n9.execute-api.ap-southeast-2.amazonaws.com/v1/sync';
+const API_ENDPOINT = process.env.REACT_APP_API_ENDPOINT || 'https://ofbdn9zezl.execute-api.ap-southeast-2.amazonaws.com/v1/sync';
 
 async function makeRequest(url, options = {}) {
   try {

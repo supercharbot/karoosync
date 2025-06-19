@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Store, ArrowRight, Check, Zap, Shield, BarChart3, Menu, X } from 'lucide-react';
+import { Store, ArrowRight, Check, Zap, Shield, BarChart3, Menu, X, Star, Users, Clock } from 'lucide-react';
 
 // Header Component
 const Header = () => {
@@ -20,13 +20,13 @@ const Header = () => {
           
           <nav className="hidden md:flex items-center space-x-8">
             <a href="#features" className="text-gray-600 hover:text-gray-900 transition-colors">Features</a>
-            <a href="#pricing" className="text-gray-600 hover:text-gray-900 transition-colors">Pricing</a>
+            <a href="#trial" className="text-gray-600 hover:text-gray-900 transition-colors">Free Trial</a>
             <a href="#contact" className="text-gray-600 hover:text-gray-900 transition-colors">Contact</a>
             <a 
               href="/app" 
               className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transition-all duration-200 transform hover:scale-105"
             >
-              Get Started
+              Start Free Trial
             </a>
           </nav>
 
@@ -42,10 +42,10 @@ const Header = () => {
           <div className="md:hidden py-4 border-t border-gray-200">
             <div className="flex flex-col space-y-4">
               <a href="#features" className="text-gray-600 hover:text-gray-900">Features</a>
-              <a href="#pricing" className="text-gray-600 hover:text-gray-900">Pricing</a>
+              <a href="#trial" className="text-gray-600 hover:text-gray-900">Free Trial</a>
               <a href="#contact" className="text-gray-600 hover:text-gray-900">Contact</a>
               <a href="/app" className="bg-blue-500 text-white px-4 py-2 rounded-lg text-center">
-                Get Started
+                Start Free Trial
               </a>
             </div>
           </div>
@@ -139,74 +139,112 @@ const Features = () => {
   );
 };
 
-// Pricing Section
-const Pricing = () => {
-  const plans = [
-    {
-      name: "Starter",
-      price: "$19",
-      period: "/month",
-      features: ["Up to 1,000 products", "Basic sync features", "Email support", "14-day free trial"],
-      popular: false
-    },
-    {
-      name: "Professional",
-      price: "$49",
-      period: "/month",
-      features: ["Up to 10,000 products", "Advanced sync options", "Priority support", "Analytics dashboard"],
-      popular: true
-    },
-    {
-      name: "Enterprise",
-      price: "$149",
-      period: "/month",
-      features: ["Unlimited products", "Custom integrations", "24/7 phone support", "Dedicated account manager"],
-      popular: false
-    }
+// Free Trial Section (replaces Pricing)
+const FreeTrial = () => {
+  const benefits = [
+    "14-day free trial with full access",
+    "Sync up to 1,000 products",
+    "Real-time product updates",
+    "Email support included",
+    "No setup fees or contracts",
+    "Cancel anytime"
+  ];
+
+  const testimonials = [
+    { name: "Sarah M.", business: "Fashion Store", text: "Saved me hours every week!" },
+    { name: "Mike T.", business: "Electronics Shop", text: "Game changer for product management." },
+    { name: "Lisa K.", business: "Home Decor", text: "So easy to use and powerful." }
   ];
 
   return (
-    <section id="pricing" className="py-20 bg-gray-50">
+    <section id="trial" className="py-20 bg-gradient-to-br from-blue-50 to-purple-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Simple, Transparent Pricing
+            Start Your Free Trial Today
           </h2>
-          <p className="text-xl text-gray-600">
-            Choose the plan that fits your store size and needs
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+            Experience the power of Karoosync with our 14-day free trial. No credit card required.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          {plans.map((plan, index) => (
-            <div key={index} className={`bg-white rounded-2xl p-8 ${plan.popular ? 'ring-2 ring-blue-500 transform scale-105' : ''} shadow-lg hover:shadow-xl transition-all duration-300`}>
-              {plan.popular && (
-                <div className="bg-blue-500 text-white text-sm font-semibold px-3 py-1 rounded-full mb-4 inline-block">
-                  Most Popular
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          {/* Left side - Benefits */}
+          <div>
+            <div className="bg-white rounded-2xl p-8 shadow-xl">
+              <div className="flex items-center mb-6">
+                <div className="bg-green-100 rounded-full p-3 mr-4">
+                  <Check className="w-6 h-6 text-green-600" />
                 </div>
-              )}
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-              <div className="flex items-baseline mb-6">
-                <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                <span className="text-gray-600 ml-1">{plan.period}</span>
+                <h3 className="text-2xl font-bold text-gray-900">Everything Included</h3>
               </div>
+              
               <ul className="space-y-4 mb-8">
-                {plan.features.map((feature, featureIndex) => (
-                  <li key={featureIndex} className="flex items-center">
-                    <Check className="w-5 h-5 text-green-500 mr-3" />
-                    <span className="text-gray-600">{feature}</span>
+                {benefits.map((benefit, index) => (
+                  <li key={index} className="flex items-center">
+                    <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" />
+                    <span className="text-gray-700">{benefit}</span>
                   </li>
                 ))}
               </ul>
-              <button className={`w-full py-3 px-6 rounded-lg font-semibold transition-all duration-200 ${
-                plan.popular 
-                  ? 'bg-blue-500 text-white hover:bg-blue-600' 
-                  : 'border-2 border-gray-300 text-gray-700 hover:border-gray-400'
-              }`}>
-                Get Started
-              </button>
+
+              <div className="border-t pt-6">
+                <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                  <div className="flex items-center">
+                    <Users className="w-4 h-4 mr-1" />
+                    <span>1,000+ happy customers</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Star className="w-4 h-4 mr-1 text-yellow-500" />
+                    <span>4.9/5 rating</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          ))}
+          </div>
+
+          {/* Right side - CTA */}
+          <div className="text-center">
+            <div className="bg-white rounded-2xl p-8 shadow-xl mb-8">
+              <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
+                <Clock className="w-10 h-10 text-white" />
+              </div>
+              
+              <h3 className="text-3xl font-bold text-gray-900 mb-4">Ready to Get Started?</h3>
+              <p className="text-gray-600 mb-8">
+                Join thousands of WooCommerce store owners who trust Karoosync for their product management.
+              </p>
+              
+              <a 
+                href="/app"
+                className="inline-block bg-gradient-to-r from-blue-500 to-purple-600 text-white px-12 py-4 rounded-lg text-xl font-semibold hover:shadow-xl transition-all duration-300 transform hover:scale-105 mb-4"
+              >
+                Start Free Trial
+              </a>
+              
+              <p className="text-sm text-gray-500">
+                14 days free • No credit card required
+              </p>
+            </div>
+
+            {/* Testimonials */}
+            <div className="grid grid-cols-1 gap-4">
+              {testimonials.map((testimonial, index) => (
+                <div key={index} className="bg-white/70 backdrop-blur-sm rounded-lg p-4 text-left">
+                  <p className="text-sm text-gray-700 italic mb-2">"{testimonial.text}"</p>
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mr-3">
+                      <span className="text-white text-xs font-bold">{testimonial.name[0]}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{testimonial.name}</p>
+                      <p className="text-xs text-gray-500">{testimonial.business}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -293,7 +331,7 @@ const Footer = () => {
           </div>
           <div className="flex space-x-8">
             <a href="#features" className="text-gray-400 hover:text-white transition-colors">Features</a>
-            <a href="#pricing" className="text-gray-400 hover:text-white transition-colors">Pricing</a>
+            <a href="#trial" className="text-gray-400 hover:text-white transition-colors">Free Trial</a>
             <a href="#contact" className="text-gray-400 hover:text-white transition-colors">Contact</a>
           </div>
         </div>
@@ -313,7 +351,7 @@ const MarketingApp = () => {
       <main>
         <Hero />
         <Features />
-        <Pricing />
+        <FreeTrial />
         <Contact />
       </main>
       <Footer />
