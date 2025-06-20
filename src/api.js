@@ -41,6 +41,16 @@ export async function loadCategoryProducts(categoryKey, authToken) {
   return result;
 }
 
+export async function loadVariations(productId, authToken) {
+  console.log(`Loading variations for product: ${productId}`);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=load-variations&productId=${productId}`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
 export async function initializeWordPressAuth(storeUrl, authToken) {
   console.log('Initializing WordPress auth...');
   
@@ -106,7 +116,7 @@ export async function deleteCategory(categoryId, authToken) {
 }
 
 // ============================================
-// NEW ACCOUNT MANAGEMENT FUNCTIONS
+// ACCOUNT MANAGEMENT FUNCTIONS
 // ============================================
 
 export async function deleteAccount(authToken) {
