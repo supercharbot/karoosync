@@ -36,8 +36,15 @@ const MainLayout = ({ userData, onReset }) => {
               <Menu className="w-6 h-6" />
             </button>
 
-            <Store className="w-6 h-6 lg:w-8 lg:h-8 text-blue-600" />
-            <h1 className="text-lg lg:text-2xl font-bold text-gray-900 dark:text-gray-100">Karoosync</h1>
+            {/* Updated Logo to match MarketingApp */}
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg lg:rounded-xl flex items-center justify-center">
+                <Store className="w-5 h-5 lg:w-6 lg:h-6 text-white" />
+              </div>
+              <span className="text-lg lg:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                KarooSync
+              </span>
+            </div>
           </div>
 
           {/* Mobile Navigation - shown on mobile only */}
@@ -57,80 +64,91 @@ const MainLayout = ({ userData, onReset }) => {
                       : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`} />
-                </NavLink>  
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-blue-700 dark:text-blue-400' : ''}`} />
+                </NavLink>
               );
             })}
           </nav>
 
-          {/* Logout Button */}
-          <button
-            onClick={logout}
-            className="px-3 py-2 lg:px-4 text-red-600 hover:text-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center text-sm lg:text-base"
-          >
-            <LogOut className="w-4 h-4 mr-1 lg:mr-2" />
-            <span className="hidden sm:inline">Logout</span>
-          </button>
+          {/* Desktop User Menu */}
+          <div className="hidden lg:flex items-center space-x-4">
+            <button
+              onClick={logout}
+              className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 flex">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={closeMobileMenu}
-          />
-          
-          {/* Mobile Menu */}
-          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-gray-800 shadow-xl">
-            <div className="absolute top-0 right-0 -mr-12 pt-2">
-              <button
-                onClick={closeMobileMenu}
-                className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-              >
-                <X className="h-6 w-6 text-white" />
-              </button>
+        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50" onClick={closeMobileMenu}>
+          <div className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                    <Store className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                    KarooSync
+                  </span>
+                </div>
+                <button
+                  onClick={closeMobileMenu}
+                  className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
-              <div className="flex-shrink-0 flex items-center px-4 mb-8">
-                <Store className="w-8 h-8 text-blue-600 mr-3" />
-                <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Karoosync</h1>
-              </div>
+            <nav className="p-4 space-y-2">
+              {navigation.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.href || 
+                  (item.href === '/products' && location.pathname.startsWith('/products'));
+                
+                return (
+                  <NavLink
+                    key={item.name}
+                    to={item.href}
+                    onClick={closeMobileMenu}
+                    className={`flex items-center w-full px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
+                    }`}
+                  >
+                    <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-blue-700 dark:text-blue-400' : ''}`} />
+                    {item.name}
+                  </NavLink>
+                );
+              })}
               
-              <nav className="px-4 space-y-2">
-                {navigation.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = location.pathname === item.href || 
-                    (item.href === '/products' && location.pathname.startsWith('/products'));
-                  
-                  return (
-                    <NavLink
-                      key={item.name}
-                      to={item.href}
-                      onClick={closeMobileMenu}
-                      className={`flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors ${
-                        isActive
-                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
-                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-                      }`}
-                    >
-                      <Icon className={`mr-3 h-6 w-6 ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`} />
-                      {item.name}
-                    </NavLink>
-                  );
-                })}
-              </nav>
-            </div>
+              <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => {
+                    logout();
+                    closeMobileMenu();
+                  }}
+                  className="flex items-center w-full px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <LogOut className="w-5 h-5 mr-3" />
+                  Sign Out
+                </button>
+              </div>
+            </nav>
           </div>
         </div>
       )}
 
-      <div className="flex">
-        {/* Desktop Sidebar - hidden on mobile */}
-        <div className="hidden lg:block w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 min-h-[calc(100vh-73px)]">
+      {/* Desktop Sidebar */}
+      <div className="hidden lg:flex">
+        <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 fixed h-[calc(100vh-73px)] overflow-y-auto">
           <nav className="p-4 space-y-2">
             {navigation.map((item) => {
               const Icon = item.icon;
@@ -141,13 +159,13 @@ const MainLayout = ({ userData, onReset }) => {
                 <NavLink
                   key={item.name}
                   to={item.href}
-                  className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                  className={`flex items-center w-full px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                     isActive
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-r-2 border-blue-700 dark:border-blue-400'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
                       : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                 >
-                  <Icon className={`mr-3 h-5 w-5 ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`} />
+                  <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-blue-700 dark:text-blue-400' : ''}`} />
                   {item.name}
                 </NavLink>
               );
@@ -155,15 +173,25 @@ const MainLayout = ({ userData, onReset }) => {
           </nav>
         </div>
 
-        {/* Main Content - full width on mobile, accounting for sidebar on desktop */}
-        <div className="flex-1">
+        {/* Main Content */}
+        <div className="flex-1 ml-64">
           <Routes>
             <Route path="/" element={<Dashboard userData={userData} />} />
-            <Route path="/products/*" element={<ProductEditor userData={userData} onReset={onReset} />} />
+            <Route path="/products" element={<ProductEditor userData={userData} />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/profile" element={<ProfilePage user={user} />} />
           </Routes>
         </div>
+      </div>
+
+      {/* Mobile Content */}
+      <div className="lg:hidden">
+        <Routes>
+          <Route path="/" element={<Dashboard userData={userData} />} />
+          <Route path="/products" element={<ProductEditor userData={userData} />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/profile" element={<ProfilePage user={user} />} />
+        </Routes>
       </div>
     </div>
   );

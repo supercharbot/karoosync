@@ -8,7 +8,7 @@ import AdvancedSettings from './AdvancedSettings';
 
 const ProductView = ({ product, onBack, onProductUpdate }) => {
   const { getAuthToken } = useAuth();
-  const [activeTab, setActiveTab] = useState('preview'); // preview or edit (mobile only)
+  const [activeTab, setActiveTab] = useState('preview');
   const [editData, setEditData] = useState({
     // Basic Information
     name: product.name || '',
@@ -66,6 +66,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
     // Images
     images: product.images || []
   });
+  
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
@@ -98,7 +99,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
     }
     
     try {
-      const authToken = await getAuthToken();
+      const authToken = await getAuthToken();   
       const result = await updateProduct(product.id, editData, authToken);
       
       if (result.success) {
@@ -220,61 +221,98 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
                   saveStatus.includes('Error') 
                     ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' 
                     : saveStatus.includes('Saving')
-                    ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400'
+                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                     : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
                 }`}>
                   {saveStatus}
                 </span>
               )}
               <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors flex items-center font-medium"
+                onClick={onBack}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? 'Saving...' : 'Save'}
+                <ArrowLeft className="w-4 h-4 mr-2 inline" />
+                Back
               </button>
-            </div>
-          </div>
-
-          <ProductEditor 
-            editData={editData} 
-            handleInputChange={handleInputChange}
-            handleImageAdd={handleImageAdd}
-            handleFileUpload={handleFileUpload}
-            handleImageDelete={handleImageDelete}
-            activeImageIndex={activeImageIndex}
-            setActiveImageIndex={setActiveImageIndex}
-          />
-        </div>
-      </div>
-
-      {/* Mobile Layout: Single Panel with Tabs */}
-      <div className="lg:hidden flex-1">
-        {activeTab === 'preview' ? (
-          <div className="overflow-auto h-[calc(100vh-200px)]">
-            <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} isMobile={true} />
-          </div>
-        ) : (
-          <div className="relative h-full">
-            <div className="overflow-auto h-[calc(100vh-250px)]">
-              <ProductEditor 
-                editData={editData} 
-                handleInputChange={handleInputChange}
-                handleImageAdd={handleImageAdd}
-                handleFileUpload={handleFileUpload}
-                handleImageDelete={handleImageDelete}
-                activeImageIndex={activeImageIndex}
-                setActiveImageIndex={setActiveImageIndex}
-                isMobile={true}
-              />
-            </div>
-            {/* Mobile Save Button */}
-            <div className="sticky bottom-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors flex items-center justify-center font-medium"
+                className="bg-blue-600 dark:bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+          <div className="h-[calc(100vh-73px)] overflow-y-auto">
+            <ProductEditor
+              editData={editData}
+              handleInputChange={handleInputChange}
+              handleImageAdd={handleImageAdd}
+              handleFileUpload={handleFileUpload}
+              handleImageDelete={handleImageDelete}
+              activeImageIndex={activeImageIndex}
+              setActiveImageIndex={setActiveImageIndex}
+              isMobile={false}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Layout */}
+      <div className="lg:hidden flex-1">
+        {activeTab === 'preview' ? (
+          <div className="bg-white dark:bg-gray-800">
+            <div className="border-b border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Product Preview</h2>
+              <button
+                onClick={onBack}
+                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            </div>
+            <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} isMobile={true} />
+          </div>
+        ) : (
+          <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 z-10">
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Product</h2>
+                <button
+                  onClick={onBack}
+                  className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+              </div>
+              {saveStatus && (
+                <div className={`text-sm px-3 py-2 rounded-lg ${
+                  saveStatus.includes('Error') 
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' 
+                    : saveStatus.includes('Saving')
+                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                    : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
+                }`}>
+                  {saveStatus}
+                </div>
+              )}
+            </div>
+            <ProductEditor
+              editData={editData}
+              handleInputChange={handleInputChange}
+              handleImageAdd={handleImageAdd}
+              handleFileUpload={handleFileUpload}
+              handleImageDelete={handleImageDelete}
+              activeImageIndex={activeImageIndex}
+              setActiveImageIndex={setActiveImageIndex}
+              isMobile={true}
+            />
+            <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full bg-blue-600 dark:bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 <Save className="w-4 h-4 mr-2" />
                 {saving ? 'Saving...' : 'Save Changes'}
@@ -404,7 +442,7 @@ const ProductPreview = ({ editData, activeImageIndex, navigateImage, isMobile = 
         </h1>
         
         <div className="flex items-baseline gap-3 mb-6">
-          {editData.sale_price ? (
+          {editData.sale_price && parseFloat(editData.sale_price) > 0 ? (
             <>
               <span className="text-3xl font-bold text-green-600 dark:text-green-400">
                 ${editData.sale_price}

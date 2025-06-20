@@ -1,22 +1,58 @@
-import React from 'react';
-import { Tag, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Tag, X, Percent } from 'lucide-react';
 
 const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
-  const isOnSale = editData.sale_price && parseFloat(editData.sale_price) > 0;
+  // Track if user has activated sale mode (separate from having valid sale price)
+  const [saleMode, setSaleMode] = useState(() => {
+    return !!(editData.sale_price || editData.date_on_sale_from || editData.date_on_sale_to);
+  });
+
+  // Track percentage input separately 
+  const [percentageInput, setPercentageInput] = useState(() => {
+    if (editData.regular_price && editData.sale_price) {
+      const regular = parseFloat(editData.regular_price);
+      const sale = parseFloat(editData.sale_price);
+      if (regular > 0 && sale >= 0 && sale < regular) {
+        return Math.round(((regular - sale) / regular) * 100).toString();
+      }
+    }
+    return '';
+  });
 
   const handlePutOnSale = () => {
-    // Set sale price to 80% of regular price as default
+    setSaleMode(true);
     const defaultSalePrice = editData.regular_price ? (parseFloat(editData.regular_price) * 0.8).toFixed(2) : '';
     handleInputChange('sale_price', defaultSalePrice);
+    if (defaultSalePrice) {
+      setPercentageInput('20');
+    }
   };
 
   const handleRemoveFromSale = () => {
+    setSaleMode(false);
+    setPercentageInput('');
     handleInputChange('sale_price', '');
     handleInputChange('date_on_sale_from', '');
     handleInputChange('date_on_sale_to', '');
   };
 
-  if (isOnSale) {
+  const handlePercentageChange = (value) => {
+    setPercentageInput(value);
+    
+    if (value === '' || !editData.regular_price) {
+      return;
+    }
+    
+    const percentage = parseFloat(value);
+    if (!isNaN(percentage) && percentage >= 0 && percentage <= 100) {
+      const regularPrice = parseFloat(editData.regular_price);
+      const discountAmount = (regularPrice * percentage) / 100;
+      const salePrice = (regularPrice - discountAmount).toFixed(2);
+      handleInputChange('sale_price', salePrice);
+    }
+  };
+
+  if (saleMode) {
     return (
       <div className={`${isMobile ? 'space-y-3 w-full max-w-full' : 'space-y-4'}`}>
         {/* Sale Status Banner */}
@@ -43,6 +79,31 @@ const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
           <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>
             Sale Configuration
           </h3>
+
+          {/* Percentage Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Discount Percentage (%)
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Percent className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={percentageInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || (/^\d+$/.test(value) && parseInt(value) <= 100)) {
+                      handlePercentageChange(value);
+                    }
+                  }}
+                  className={`w-full px-4 pr-10 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                  placeholder="20"
+                />
+              </div>
+              <span className="text-sm text-gray-500 dark:text-gray-400">off regular price</span>
+            </div>
+          </div>
 
           <div className={`grid ${isMobile ? 'grid-cols-1 gap-3' : 'grid-cols-1 sm:grid-cols-2 gap-4'}`}>
             <div>
