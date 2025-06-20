@@ -1,6 +1,6 @@
 import React from 'react';
-import { X, Upload, Plus, Image } from 'lucide-react';
-import WysiwygEditor from './WysiwygEditor';
+import { Image, X, Upload, Plus } from 'lucide-react';
+import SaleSettings from './SaleSettings';
 
 const BasicSettings = ({ 
   editData, 
@@ -10,308 +10,79 @@ const BasicSettings = ({
   handleImageDelete, 
   activeImageIndex, 
   setActiveImageIndex,
-  isMobile = false 
+  isMobile = false,
+  hidepricing = false
 }) => {
   return (
-    <div className={`${isMobile ? 'space-y-4' : 'space-y-6'}`}>
-      {/* Basic Information */}
-      <div className={`${isMobile ? 'space-y-3 w-full max-w-full' : 'space-y-4'}`}>
+    <div className={`${isMobile ? 'p-4 pb-20 w-full max-w-full min-w-0' : 'p-6'} ${isMobile ? 'space-y-4' : 'space-y-6'}`}>
+      
+      {/* Sale Settings */}
+      {!hidepricing && (
+        <SaleSettings 
+          editData={editData}
+          handleInputChange={handleInputChange}
+          isMobile={isMobile}
+        />
+      )}
+
+      {/* Basic Product Information */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6 space-y-4">
         <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Basic Information</h3>
         
+        {/* Product Name */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Product Name
           </label>
           <input
             type="text"
-            value={editData.name}
+            value={editData.name || ''}
             onChange={(e) => handleInputChange('name', e.target.value)}
-            className={`w-full ${isMobile ? 'min-w-0 max-w-full' : ''} px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+            className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
             placeholder="Enter product name"
           />
         </div>
 
+        {/* SKU */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Short Description
-            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(Brief summary for product listings)</span>
-          </label>
-          <WysiwygEditor
-            value={editData.short_description}
-            onChange={(content) => handleInputChange('short_description', content)}
-            placeholder="Brief product summary for listings..."
-            className={`w-full ${isMobile ? 'min-w-0 max-w-full' : ''}`}
-            isMobile={isMobile}
-            minHeight={isMobile ? '120px' : '100px'}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Full Description
-            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(Detailed product information)</span>
-          </label>
-          <WysiwygEditor
-            value={editData.description}
-            onChange={(content) => handleInputChange('description', content)}
-            placeholder="Detailed product description with features, benefits, specifications..."
-            className={`w-full ${isMobile ? 'min-w-0 max-w-full' : ''}`}
-            isMobile={isMobile}
-            minHeight={isMobile ? '200px' : '180px'}
-          />
-        </div>
-
-        {/* Status and Visibility */}
-        <div className={`grid ${isMobile ? 'grid-cols-1 gap-3' : 'grid-cols-1 sm:grid-cols-2 gap-4'}`}>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Status
-            </label>
-            <select
-              value={editData.status}
-              onChange={(e) => handleInputChange('status', e.target.value)}
-              className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-            >
-              <option value="publish">Published</option>
-              <option value="draft">Draft</option>
-              <option value="pending">Pending Review</option>
-              <option value="private">Private</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Catalog Visibility
-            </label>
-            <select
-              value={editData.catalog_visibility}
-              onChange={(e) => handleInputChange('catalog_visibility', e.target.value)}
-              className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-            >
-              <option value="visible">Visible</option>
-              <option value="catalog">Catalog only</option>
-              <option value="search">Search only</option>
-              <option value="hidden">Hidden</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Inventory */}
-      <div className={`${isMobile ? 'space-y-3 w-full max-w-full' : 'space-y-4'}`}>
-        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Inventory</h3>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             SKU
           </label>
           <input
             type="text"
-            value={editData.sku}
+            value={editData.sku || ''}
             onChange={(e) => handleInputChange('sku', e.target.value)}
-            className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+            className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
             placeholder="Product SKU"
           />
         </div>
 
-        <div className={`grid ${isMobile ? 'grid-cols-1 gap-3' : 'grid-cols-1 sm:grid-cols-2 gap-4'}`}>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Stock Status
-            </label>
-            <select
-              value={editData.stock_status}
-              onChange={(e) => handleInputChange('stock_status', e.target.value)}
-              className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-            >
-              <option value="instock">In Stock</option>
-              <option value="outofstock">Out of Stock</option>
-              <option value="onbackorder">On Backorder</option>
-            </select>
-          </div>
-          
-          {editData.manage_stock && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Stock Quantity
-              </label>
-              <input
-                type="number"
-                value={editData.stock_quantity}
-                onChange={(e) => handleInputChange('stock_quantity', e.target.value)}
-                className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-                placeholder="0"
-                min="0"
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={editData.manage_stock}
-              onChange={(e) => handleInputChange('manage_stock', e.target.checked)}
-              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-            />
-            <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Manage stock</span>
-          </label>
-          
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={editData.sold_individually}
-              onChange={(e) => handleInputChange('sold_individually', e.target.checked)}
-              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-            />
-            <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Sold individually</span>
-          </label>
-        </div>
-      </div>
-
-      {/* Shipping */}
-      <div className={`${isMobile ? 'space-y-3 w-full max-w-full' : 'space-y-4'}`}>
-        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Shipping</h3>
-        
+        {/* Short Description */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Weight (kg)
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Short Description
           </label>
-          <input
-            type="text"
-            value={editData.weight}
-            onChange={(e) => handleInputChange('weight', e.target.value)}
-            className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-            placeholder="0"
+          <textarea
+            value={editData.short_description || ''}
+            onChange={(e) => handleInputChange('short_description', e.target.value)}
+            rows={3}
+            className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+            placeholder="Brief product description"
           />
         </div>
 
+        {/* Full Description */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Dimensions (cm)
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Description
           </label>
-          <div className={`grid ${isMobile ? 'grid-cols-1 gap-3' : 'grid-cols-3 gap-4'}`}>
-            <input
-              type="text"
-              value={editData.dimensions?.length || ''}
-              onChange={(e) => handleInputChange('dimensions.length', e.target.value)}
-              className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-              placeholder="Length"
-            />
-            <input
-              type="text"
-              value={editData.dimensions?.width || ''}
-              onChange={(e) => handleInputChange('dimensions.width', e.target.value)}
-              className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-              placeholder="Width"
-            />
-            <input
-              type="text"
-              value={editData.dimensions?.height || ''}
-              onChange={(e) => handleInputChange('dimensions.height', e.target.value)}
-              className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-              placeholder="Height"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Categories & Tags */}
-      <div className="space-y-4">
-        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Categories & Tags</h3>
-        
-        {/* Categories */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Categories
-          </label>
-          <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-700 min-h-[80px]">
-            {editData.categories.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {editData.categories.map((category, index) => (
-                  <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400">
-                    {category.name}
-                    <button
-                      onClick={() => {
-                        const newCategories = editData.categories.filter((_, i) => i !== index);
-                        handleInputChange('categories', newCategories);
-                      }}
-                      className="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 dark:text-gray-400 text-center">No categories assigned</p>
-            )}
-          </div>
-          
-          {/* Add Category Input */}
-          <div className="mt-3">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Add category (press Enter)"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && e.target.value.trim()) {
-                    const newCategory = { id: Date.now(), name: e.target.value.trim() };
-                    handleInputChange('categories', [...editData.categories, newCategory]);
-                    e.target.value = '';
-                  }
-                }}
-                className={`flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Tags */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Tags
-          </label>
-          <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-700 min-h-[80px]">
-            {editData.tags.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {editData.tags.map((tag, index) => (
-                  <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400">
-                    {tag.name}
-                    <button
-                      onClick={() => {
-                        const newTags = editData.tags.filter((_, i) => i !== index);
-                        handleInputChange('tags', newTags);
-                      }}
-                      className="ml-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 dark:text-gray-400 text-center">No tags assigned</p>
-            )}
-          </div>
-          
-          {/* Add Tag Input */}
-          <div className="mt-3">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Add tag (press Enter)"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && e.target.value.trim()) {
-                    const newTag = { id: Date.now(), name: e.target.value.trim() };
-                    handleInputChange('tags', [...editData.tags, newTag]);
-                    e.target.value = '';
-                  }
-                }}
-                className={`flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-              />
-            </div>
-          </div>
+          <textarea
+            value={editData.description || ''}
+            onChange={(e) => handleInputChange('description', e.target.value)}
+            rows={6}
+            className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+            placeholder="Detailed product description"
+          />
         </div>
       </div>
 
@@ -379,18 +150,254 @@ const BasicSettings = ({
           />
           <label
             htmlFor="image-upload"
-            className={`flex-1 flex items-center justify-center px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${isMobile ? 'text-base' : ''}`}
+            className={`flex-1 flex items-center justify-center px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${isMobile ? 'text-base' : 'text-sm'}`}
           >
             <Upload className="w-4 h-4 mr-2" />
             Upload Images
           </label>
+        </div>
+
+        {/* Add Image URL */}
+        <div className="flex gap-2">
+          <input
+            type="url"
+            placeholder="Or paste image URL and press Enter..."
+            className={`flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : 'text-sm'}`}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleImageAdd(e.target.value);
+                e.target.value = '';
+              }
+            }}
+          />
           <button
-            type="button"
-            onClick={handleImageAdd}
-            className={`px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${isMobile ? 'text-base' : ''}`}
+            onClick={(e) => {
+              const input = e.target.previousElementSibling;
+              handleImageAdd(input.value);
+              input.value = '';
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
           >
             <Plus className="w-4 h-4" />
           </button>
+        </div>
+      </div>
+
+      {/* Product Status & Settings */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Status */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Status
+          </label>
+          <select
+            value={editData.status || 'publish'}
+            onChange={(e) => handleInputChange('status', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          >
+            <option value="publish">Published</option>
+            <option value="draft">Draft</option>
+            <option value="private">Private</option>
+          </select>
+        </div>
+
+        {/* Catalog Visibility */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Catalog Visibility
+          </label>
+          <select
+            value={editData.catalog_visibility || 'visible'}
+            onChange={(e) => handleInputChange('catalog_visibility', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          >
+            <option value="visible">Visible</option>
+            <option value="catalog">Catalog Only</option>
+            <option value="search">Search Only</option>
+            <option value="hidden">Hidden</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Feature Toggles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={editData.featured || false}
+            onChange={(e) => handleInputChange('featured', e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Featured</span>
+        </label>
+
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={editData.virtual || false}
+            onChange={(e) => handleInputChange('virtual', e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Virtual</span>
+        </label>
+
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={editData.downloadable || false}
+            onChange={(e) => handleInputChange('downloadable', e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Downloadable</span>
+        </label>
+
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={editData.reviews_allowed !== false}
+            onChange={(e) => handleInputChange('reviews_allowed', e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Reviews</span>
+        </label>
+      </div>
+
+      {/* Inventory Section */}
+      {!hidepricing && (
+        <div className="space-y-4">
+          <h4 className="font-medium text-gray-900 dark:text-gray-100">Inventory</h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Manage Stock */}
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={editData.manage_stock || false}
+                onChange={(e) => handleInputChange('manage_stock', e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Manage stock?</span>
+            </label>
+
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={editData.sold_individually || false}
+                onChange={(e) => handleInputChange('sold_individually', e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Sold individually?</span>
+            </label>
+          </div>
+
+          {editData.manage_stock && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Stock Quantity
+                </label>
+                <input
+                  type="number"
+                  value={editData.stock_quantity || ''}
+                  onChange={(e) => handleInputChange('stock_quantity', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Backorders
+                </label>
+                <select
+                  value={editData.backorders || 'no'}
+                  onChange={(e) => handleInputChange('backorders', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="no">Do not allow</option>
+                  <option value="notify">Allow, but notify customer</option>
+                  <option value="yes">Allow</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Stock Status
+            </label>
+            <select
+              value={editData.stock_status || 'instock'}
+              onChange={(e) => handleInputChange('stock_status', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 md:w-1/2"
+            >
+              <option value="instock">In stock</option>
+              <option value="outofstock">Out of stock</option>
+              <option value="onbackorder">On backorder</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Shipping */}
+      <div className="space-y-4">
+        <h4 className="font-medium text-gray-900 dark:text-gray-100">Shipping</h4>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Weight
+            </label>
+            <input
+              type="text"
+              value={editData.weight || ''}
+              onChange={(e) => handleInputChange('weight', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="0"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Shipping Class
+            </label>
+            <input
+              type="text"
+              value={editData.shipping_class || ''}
+              onChange={(e) => handleInputChange('shipping_class', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Shipping class"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Dimensions
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <input
+              type="text"
+              value={editData.dimensions?.length || ''}
+              onChange={(e) => handleInputChange('dimensions.length', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Length"
+            />
+            <input
+              type="text"
+              value={editData.dimensions?.width || ''}
+              onChange={(e) => handleInputChange('dimensions.width', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Width"
+            />
+            <input
+              type="text"
+              value={editData.dimensions?.height || ''}
+              onChange={(e) => handleInputChange('dimensions.height', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Height"
+            />
+          </div>
         </div>
       </div>
     </div>

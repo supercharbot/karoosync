@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import CategoryView from './CategoryView';
 import ProductView from './ProductView';
-import VariableProductView from './VariableProductView'; // NEW IMPORT
+import ParentProduct from './ParentProduct'; // CHANGED: VariableProductView → ParentProduct
 import { ChevronRight, Home } from 'lucide-react';
 
 const ProductEditor = ({ userData, onReset }) => {
@@ -22,7 +22,12 @@ const ProductEditor = ({ userData, onReset }) => {
 
   const handleProductSelect = (product) => {
     setSelectedProduct(product);
-    setCurrentView('product-edit');
+    // CHANGED: Add product type check
+    if (product.type === 'variable') {
+      setCurrentView('parent-product');
+    } else {
+      setCurrentView('product-edit');
+    }
   };
 
   const handleBackToCategories = () => {
@@ -88,15 +93,10 @@ const ProductEditor = ({ userData, onReset }) => {
     }
   };
 
-  // NEW FUNCTION: Check if product is variable type
-  const isVariableProduct = (product) => {
-    return product && product.type === 'variable';
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Breadcrumb Navigation */}
-      {(currentView === 'products' || currentView === 'product-edit') && (
+      {(currentView === 'products' || currentView === 'product-edit' || currentView === 'parent-product') && (
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div className="px-4 sm:px-6 lg:px-8 py-3">
             <div className="flex items-center space-x-2 text-sm overflow-x-auto">
@@ -146,27 +146,25 @@ const ProductEditor = ({ userData, onReset }) => {
         />
       )}
 
-      {/* UPDATED: Route to appropriate product editor based on type */}
       {currentView === 'product-edit' && selectedProduct && (
-        <>
-          {isVariableProduct(selectedProduct) ? (
-            <VariableProductView
-              product={selectedProduct}
-              onBack={handleBackToProducts}
-              onProductUpdate={(updatedProduct) => {
-                setSelectedProduct(updatedProduct);
-              }}
-            />
-          ) : (
-            <ProductView
-              product={selectedProduct}
-              onBack={handleBackToProducts}
-              onProductUpdate={(updatedProduct) => {
-                setSelectedProduct(updatedProduct);
-              }}
-            />
-          )}
-        </>
+        <ProductView
+          product={selectedProduct}
+          onBack={handleBackToProducts}
+          onProductUpdate={(updatedProduct) => {
+            setSelectedProduct(updatedProduct);
+          }}
+        />
+      )}
+
+      {/* ADDED: New view for variable products */}
+      {currentView === 'parent-product' && selectedProduct && (
+        <ParentProduct
+          product={selectedProduct}
+          onBack={handleBackToProducts}
+          onProductUpdate={(updatedProduct) => {
+            setSelectedProduct(updatedProduct);
+          }}
+        />
       )}
     </div>
   );

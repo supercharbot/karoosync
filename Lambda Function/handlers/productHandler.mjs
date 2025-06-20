@@ -236,11 +236,11 @@ async function updateVariableProduct(userId, productId, productData) {
                         regular_price: variation.regular_price || '',
                         sale_price: variation.sale_price || '',
                         sku: variation.sku || '',
-                        stock_quantity: variation.stock_quantity ? parseInt(variation.stock_quantity) : null,
                         manage_stock: variation.manage_stock || false,
                         stock_status: variation.stock_status || 'instock',
                         weight: variation.weight || '',
-                        dimensions: variation.dimensions || { length: '', width: '', height: '' }
+                        dimensions: variation.dimensions || { length: '', width: '', height: '' },
+                        image: variation.image || null
                     };
 
                     const updatedVariation = await makeWordPressRequest(
