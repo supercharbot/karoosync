@@ -1,6 +1,6 @@
 import https from 'https';
 import zlib from 'zlib';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 
 const s3Client = new S3Client({ region: 'ap-southeast-2' });
 const BUCKET_NAME = 'karoosync';
@@ -237,6 +237,25 @@ async function storeData(userId, syncData, credentials) {
     return { success: true, categoriesStored: Object.keys(productsByCategory).length };
 }
 
+async function getUserCredentials(userId) {
+    try {
+        const response = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/credentials.json.gz`
+        }));
+        
+        const compressed = await response.Body.transformToByteArray();
+        const credentials = JSON.parse(zlib.gunzipSync(compressed).toString());
+        
+        return credentials;
+    } catch (error) {
+        if (error.name === 'NoSuchKey') {
+            return null;
+        }
+        throw error;
+    }
+}
+
 export async function handleSync(event, userId) {
     if (event.httpMethod === 'GET' && event.queryStringParameters?.action === 'init-auth') {
         const storeUrl = event.queryStringParameters?.url;
@@ -254,6 +273,48 @@ export async function handleSync(event, userId) {
             headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
             body: JSON.stringify(result)
         };
+    }
+    
+    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'resync') {
+        try {
+            const credentials = await getUserCredentials(userId);
+            
+            if (!credentials) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        success: false, 
+                        error: 'No stored credentials found. Please reconnect your store.' 
+                    })
+                };
+            }
+            
+            const syncData = await syncWordPress(credentials.url, credentials.username, credentials.appPassword);
+            const storeResult = await storeData(userId, syncData, credentials);
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    success: true,
+                    structure: 'categorized',
+                    metadata: { categories: syncData.categories, totalProducts: syncData.totalProducts },
+                    categoriesStored: storeResult.categoriesStored
+                })
+            };
+            
+        } catch (error) {
+            console.error('Resync error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    success: false, 
+                    error: error.message 
+                })
+            };
+        }
     }
     
     if (event.httpMethod === 'POST') {

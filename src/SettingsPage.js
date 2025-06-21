@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { useTheme } from './ThemeContext';
-import { fetchUserAttributes, getCurrentUser, updateUserAttributes } from 'aws-amplify/auth';
+import { updateUserAttributes, fetchUserAttributes } from 'aws-amplify/auth';
+import { resyncWordPressStore } from './api';
 import { 
   syncWordPressStore, 
   deleteAccount, 
@@ -457,9 +458,7 @@ const SettingsPage = () => {
 
     try {
       const authToken = await getAuthToken();
-      const result = await syncWordPressStore(authToken, (status) => {
-        setSyncStatus(status);
-      });
+      const result = await resyncWordPressStore(authToken);
 
       if (result.success) {
         setSyncStatus('Sync completed successfully!');

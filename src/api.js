@@ -77,6 +77,17 @@ export async function syncWordPressStore(credentials, authToken) {
   return result;
 }
 
+export async function resyncWordPressStore(authToken) {
+  console.log('Re-syncing WordPress store with stored credentials...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=resync`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
 export async function updateProduct(productId, productData, authToken) {
   console.log(`Updating product: ${productId}`);
   

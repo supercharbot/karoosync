@@ -89,8 +89,8 @@ export const handler = async (event) => {
             return await handleAccount(event, userId);
         }
         
-        // Sync operations: init-auth (GET) and sync (POST without action)
-        if (action === 'init-auth' || (event.httpMethod === 'POST' && !action)) {
+        // Sync operations: init-auth (GET), sync (POST without action), and resync
+        if (action === 'init-auth' || action === 'resync' || (event.httpMethod === 'POST' && !action)) {
             console.log('🔄 Routing to Sync handler');
             return await handleSync(event, userId);
         }
