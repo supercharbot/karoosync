@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, X, Upload, Plus } from 'lucide-react';
 import SaleSettings from './SaleSettings';
+import WysiwygEditor from './WysiwygEditor';
 
 const BasicSettings = ({ 
   editData, 
@@ -62,12 +63,12 @@ const BasicSettings = ({
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Short Description
           </label>
-          <textarea
+          <WysiwygEditor
             value={editData.short_description || ''}
-            onChange={(e) => handleInputChange('short_description', e.target.value)}
-            rows={3}
-            className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+            onChange={(value) => handleInputChange('short_description', value)}
             placeholder="Brief product description"
+            isMobile={isMobile}
+            minHeight="120px"
           />
         </div>
 
@@ -76,12 +77,12 @@ const BasicSettings = ({
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Description
           </label>
-          <textarea
+          <WysiwygEditor
             value={editData.description || ''}
-            onChange={(e) => handleInputChange('description', e.target.value)}
-            rows={6}
-            className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+            onChange={(value) => handleInputChange('description', value)}
             placeholder="Detailed product description"
+            isMobile={isMobile}
+            minHeight="200px"
           />
         </div>
       </div>
