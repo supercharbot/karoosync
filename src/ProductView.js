@@ -244,7 +244,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
               </button>
             </div>
           </div>
-          <div className="h-[calc(100vh-73px)] overflow-y-auto">
+          <div>
             <ProductEditor
               editData={editData}
               handleInputChange={handleInputChange}
