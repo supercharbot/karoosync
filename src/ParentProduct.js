@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Save, Image, ChevronLeft, ChevronRight, X, Upload, Eye, Edit3, Package, Settings, List } from 'lucide-react';
+import { Save, Image, ChevronLeft, ChevronRight, X, Upload, Eye, Edit3, Package, Settings, List } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { updateProduct } from './api';
 import BasicSettings from './BasicSettings';
@@ -191,44 +191,7 @@ const ParentProduct = ({ product, onBack, onProductUpdate }) => {
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
         <div className="px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={onBack}
-                className="flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-              >
-                <ArrowLeft className="w-5 h-5 mr-2" />
-                Back to Products
-              </button>
-              <div className="flex items-center space-x-2">
-                <Package className="w-5 h-5 text-purple-600" />
-                <span className="text-sm font-medium text-purple-600 bg-purple-100 dark:bg-purple-900/20 px-2 py-1 rounded">
-                  Variable Product
-                </span>
-              </div>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                {editData.name || 'Untitled Product'}
-              </h1>
-            </div>
-            
-            <div className="flex items-center space-x-3">
-              {saveStatus && (
-                <span className={`text-sm ${saveStatus.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
-                  {saveStatus}
-                </span>
-              )}
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
-              >
-                <Save className="w-4 h-4" />
-                <span>{saving ? 'Saving...' : 'Save Product'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="mt-4">
+            {/* Tabs moved to header and inline with save button */}
             <nav className="flex space-x-8">
               <button
                 onClick={() => setActiveTab('details')}
@@ -253,7 +216,24 @@ const ParentProduct = ({ product, onBack, onProductUpdate }) => {
                 Manage Variations
               </button>
             </nav>
+            
+            <div className="flex items-center space-x-3">
+              {saveStatus && (
+                <span className={`text-sm ${saveStatus.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
+                  {saveStatus}
+                </span>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+              >
+                <Save className="w-4 h-4" />
+                <span>{saving ? 'Saving...' : 'Save Product'}</span>
+              </button>
+            </div>
           </div>
+
         </div>
       </div>
 

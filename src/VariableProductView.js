@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { loadVariations, updateProduct } from './api';
-import { ArrowLeft, ChevronDown, ChevronUp, Package, Edit3, Save, X, Plus, Minus, DollarSign, Hash, Package2, Ruler, Eye, EyeOff, Image, Upload } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Package, Edit3, Save, X, Plus, Minus, DollarSign, Hash, Package2, Ruler, Eye, EyeOff, Image, Upload, Settings, List } from 'lucide-react';
 
 const VariableProductView = ({ product, onBack, onProductUpdate }) => {
   const { getAuthToken } = useAuth();
@@ -87,76 +87,43 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
     ));
   };
 
-  const handleVariationFileUpload = (variationId, event) => {
-    const files = Array.from(event.target.files);
-    if (files.length === 0) return;
-
-    const file = files[0]; // Only handle first file for variations
-    const reader = new FileReader();
-    
-    reader.onload = (e) => {
-      const imageData = {
-        id: 0,
-        src: e.target.result,
-        name: file.name,
-        alt: formatAttributeText(variations.find(v => v.id === variationId)?.attributes || [])
-      };
-      
-      setVariations(prev => prev.map(variation => 
-        variation.id === variationId 
-          ? { ...variation, image: imageData }
-          : variation
-      ));
-    };
-    
-    reader.readAsDataURL(file);
-  };
-
   const toggleVariationExpanded = (variationId) => {
-    setExpandedVariation(expandedVariation === variationId ? null : variationId);
+    setExpandedVariation(prev => prev === variationId ? null : variationId);
   };
 
   const handleSave = async () => {
     setSaving(true);
-    setSaveStatus('Updating parent product...');
+    setSaveStatus('Saving variations...');
     
     try {
-      const authToken = await getAuthToken();
-      
-      // Prepare data structure for backend
-      const updateData = {
-        ...parentEditData,
-        type: 'variable',
-        variations: variations.map(variation => ({
-          id: variation.id,
-          regular_price: variation.regular_price || '',
-          sale_price: variation.sale_price || '',
-          sku: variation.sku || '',
-          gtin: variation.gtin || '',
-          status: variation.status || 'publish',
-          downloadable: variation.downloadable || false,
-          virtual: variation.virtual || false,
-          manage_stock: variation.manage_stock || false,
-          stock_status: variation.stock_status || 'instock',
-          weight: variation.weight || '',
-          dimensions: variation.dimensions || { length: '', width: '', height: '' },
-          shipping_class: variation.shipping_class || '',
-          description: variation.description || '',
-          image: variation.image || null
-        }))
-      };
+      const token = await getAuthToken();
+      if (!token) {
+        setSaveStatus('Error: Authentication required');
+        setSaving(false);
+        return;
+      }
 
-      setSaveStatus('Updating variations...');
-      const result = await updateProduct(product.id, updateData, authToken);
-      
-      if (result.success) {
-        const successCount = result.variationResults?.filter(r => r.success).length || 0;
-        const totalCount = result.variationResults?.length || 0;
-        setSaveStatus(`✅ Saved! Updated ${successCount}/${totalCount} variations`);
-        onProductUpdate(result.data);
+      let successCount = 0;
+      const totalCount = variations.length;
+
+      // Update each variation
+      for (const variation of variations) {
+        try {
+          const result = await updateProduct(variation.id, variation, token);
+          if (result.success) {
+            successCount++;
+          }
+        } catch (err) {
+          console.error(`Failed to update variation ${variation.id}:`, err);
+        }
+      }
+
+      if (successCount === totalCount) {
+        setSaveStatus(`Successfully updated all ${totalCount} variations`);
         setTimeout(() => setSaveStatus(''), 4000);
       } else {
-        setSaveStatus(`Error: ${result.error}`);
+        setSaveStatus(`Updated ${successCount}/${totalCount} variations`);
+        setTimeout(() => setSaveStatus(''), 4000);
       }
     } catch (err) {
       setSaveStatus(`Error: ${err.message}`);
@@ -198,43 +165,55 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Save Status Bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={onBack}
-            className="text-blue-600 hover:text-blue-700 flex items-center space-x-1"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Product Details</span>
-          </button>
-        </div>
-        
-        <div className="flex items-center space-x-3">
-          {saveStatus && (
-            <span className={`text-sm ${saveStatus.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
-              {saveStatus}
-            </span>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
-          >
-            <Save className="w-4 h-4" />
-            <span>{saving ? 'Saving...' : 'Save All Changes'}</span>
-          </button>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header */}
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            {/* Tabs moved to header and inline with save button */}
+            <nav className="flex space-x-8">
+              <button
+                onClick={onBack}
+                className="py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <Settings className="w-4 h-4 inline mr-2" />
+                Product Details
+              </button>
+              <button
+                className="py-2 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600 dark:text-blue-400"
+              >
+                <List className="w-4 h-4 inline mr-2" />
+                Manage Variations
+              </button>
+            </nav>
+            
+            <div className="flex items-center space-x-3">
+              {saveStatus && (
+                <span className={`text-sm ${saveStatus.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
+                  {saveStatus}
+                </span>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+              >
+                <Save className="w-4 h-4" />
+                <span>{saving ? 'Saving...' : 'Save Product'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-lg">
-          <p className="text-red-700 dark:text-red-400">{error}</p>
-        </div>
-      )}
+      {/* Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-lg mb-6">
+            <p className="text-red-700 dark:text-red-400">{error}</p>
+          </div>
+        )}
 
-      <div className="max-w-7xl mx-auto">
         <div className="space-y-6">
           {/* Variations List */}
           <div>
@@ -335,7 +314,7 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
                               value={variation.sku || ''}
                               onChange={(e) => handleVariationChange(variation.id, 'sku', e.target.value)}
                               className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                              placeholder="Product SKU"
+                              placeholder="VAR-SKU"
                             />
                           </div>
                         </div>
@@ -356,59 +335,68 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
                           </select>
                         </div>
 
+                        {/* Weight */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Weight
+                          </label>
+                          <div className="relative">
+                            <Ruler className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                              type="text"
+                              value={variation.weight || ''}
+                              onChange={(e) => handleVariationChange(variation.id, 'weight', e.target.value)}
+                              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Stock Quantity */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Stock Quantity
+                          </label>
+                          <input
+                            type="number"
+                            value={variation.stock_quantity || ''}
+                            onChange={(e) => handleVariationChange(variation.id, 'stock_quantity', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                            placeholder="0"
+                          />
+                        </div>
+
                         {/* Variation Image */}
                         <div className="md:col-span-2">
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Variation Image
                           </label>
-                          
-                          {variation.image ? (
-                            <div className="space-y-3">
-                              {/* Current Image Display */}
-                              <div className="relative w-32 h-32 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden">
+                          <div className="flex items-center space-x-4">
+                            {variation.image?.src ? (
+                              <div className="relative">
                                 <img
                                   src={variation.image.src}
-                                  alt={variation.image.alt || 'Variation image'}
-                                  className="w-full h-full object-cover"
+                                  alt="Variation"
+                                  className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-gray-600"
                                 />
                                 <button
                                   onClick={() => handleVariationImageDelete(variation.id)}
-                                  className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
                                 >
                                   <X className="w-3 h-3" />
                                 </button>
                               </div>
-                            </div>
-                          ) : (
-                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
-                              <Image className="w-8 h-8 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
-                              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">No variation image</p>
-                            </div>
-                          )}
-
-                          {/* Upload Controls */}
-                          <div className="flex gap-2 mt-3">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => handleVariationFileUpload(variation.id, e)}
-                              className="hidden"
-                              id={`variation-image-upload-${variation.id}`}
-                            />
-                            <label
-                              htmlFor={`variation-image-upload-${variation.id}`}
-                              className="flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer text-sm"
-                            >
-                              <Upload className="w-4 h-4 mr-2" />
-                              Upload Image
-                            </label>
-                            
+                            ) : (
+                              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 flex items-center justify-center">
+                                <Image className="w-6 h-6 text-gray-400" />
+                              </div>
+                            )}
                             <div className="flex-1">
                               <input
-                                type="url"
-                                placeholder="Or paste image URL..."
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-                                onKeyDown={(e) => {
+                                type="text"
+                                placeholder="Enter image URL"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                onKeyPress={(e) => {
                                   if (e.key === 'Enter') {
                                     handleVariationImageAdd(variation.id, e.target.value);
                                     e.target.value = '';
@@ -417,65 +405,6 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
                               />
                             </div>
                           </div>
-                        </div>
-
-                        {/* Status Checkboxes */}
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Status Options
-                          </label>
-                          <div className="grid grid-cols-2 gap-3">
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={variation.status === 'publish'}
-                                onChange={(e) => handleVariationChange(variation.id, 'status', e.target.checked ? 'publish' : 'private')}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enabled</span>
-                            </label>
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={variation.downloadable || false}
-                                onChange={(e) => handleVariationChange(variation.id, 'downloadable', e.target.checked)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Downloadable</span>
-                            </label>
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={variation.virtual || false}
-                                onChange={(e) => handleVariationChange(variation.id, 'virtual', e.target.checked)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Virtual</span>
-                            </label>
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={variation.manage_stock || false}
-                                onChange={(e) => handleVariationChange(variation.id, 'manage_stock', e.target.checked)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Manage Stock</span>
-                            </label>
-                          </div>
-                        </div>
-
-                        {/* Weight */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Weight
-                          </label>
-                          <input
-                            type="text"
-                            value={variation.weight || ''}
-                            onChange={(e) => handleVariationChange(variation.id, 'weight', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                            placeholder="0"
-                          />
                         </div>
 
                         {/* Dimensions */}
