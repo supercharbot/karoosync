@@ -1,8 +1,10 @@
 import https from 'https';
 import zlib from 'zlib';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 
 const s3Client = new S3Client({ region: 'ap-southeast-2' });
+const lambdaClient = new LambdaClient({ region: 'ap-southeast-2' });
 const BUCKET_NAME = 'karoosync';
 
 const CORS_HEADERS = {
@@ -12,6 +14,7 @@ const CORS_HEADERS = {
     'Access-Control-Max-Age': '86400'
 };
 
+// Generate UUID for WordPress auth and sync tracking
 const generateUUID = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         const r = Math.random() * 16 | 0;
@@ -76,46 +79,7 @@ async function initializeWordPressAuth(storeUrl) {
     }
 }
 
-async function syncWordPress(url, username, appPassword) {
-    const baseUrl = url.startsWith('http') ? url : `https://${url}`;
-    const auth = Buffer.from(`${username}:${appPassword}`).toString('base64');
-    
-    const products = await fetchAllProducts(baseUrl, auth);
-    const categories = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/categories', auth, { per_page: 100 });
-    
-    return {
-        products,
-        categories: categories || [],
-        attributes: [],
-        systemStatus: null,
-        totalProducts: products.length,
-        extractedAt: new Date().toISOString()
-    };
-}
-
-async function fetchAllProducts(baseUrl, auth) {
-    const allProducts = [];
-    let page = 1;
-    
-    while (page <= 100) {
-        const products = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {
-            page,
-            per_page: 20,
-            status: 'any'
-        });
-        
-        if (!products || products.length === 0) break;
-        
-        allProducts.push(...products);
-        if (products.length < 20) break;
-        
-        page++;
-        await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    
-    return allProducts;
-}
-
+// Enhanced WordPress API request function
 function makeWordPressRequest(baseUrl, endpoint, auth, params = {}, method = 'GET', body = null) {
     return new Promise((resolve, reject) => {
         const url = new URL(`${baseUrl}${endpoint}`);
@@ -137,14 +101,14 @@ function makeWordPressRequest(baseUrl, endpoint, auth, params = {}, method = 'GE
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                    try {
-                        resolve(JSON.parse(data));
-                    } catch (e) {
-                        reject(new Error('Invalid JSON response'));
+                try {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        resolve(data ? JSON.parse(data) : {});
+                    } else {
+                        reject(new Error(`HTTP ${res.statusCode}: ${data}`));
                     }
-                } else {
-                    reject(new Error(`HTTP ${res.statusCode}: ${data.substring(0, 200)}`));
+                } catch (parseError) {
+                    reject(new Error(`Parse error: ${parseError.message}`));
                 }
             });
         });
@@ -155,88 +119,828 @@ function makeWordPressRequest(baseUrl, endpoint, auth, params = {}, method = 'GE
             reject(new Error('Request timeout'));
         });
         
-        if (body && (method === 'POST' || method === 'PUT')) {
-            req.write(JSON.stringify(body));
+        if (body && method !== 'GET') {
+            req.write(typeof body === 'string' ? body : JSON.stringify(body));
         }
         
         req.end();
     });
 }
 
-async function storeData(userId, syncData, credentials) {
-    const timestamp = new Date().toISOString();
-    
-    const productsByCategory = { uncategorized: [] };
-    const categoryProductCounts = {};
-    
-    syncData.products.forEach(product => {
-        const categoryIds = product.categories?.map(cat => cat.id) || [];
+// Update sync status in S3
+async function updateSyncStatus(userId, syncId, statusUpdate) {
+    try {
+        let currentStatus = {
+            syncId,
+            status: 'unknown',
+            progress: 0,
+            startedAt: new Date().toISOString()
+        };
         
-        if (categoryIds.length === 0) {
-            productsByCategory.uncategorized.push(product);
-            categoryProductCounts['uncategorized'] = (categoryProductCounts['uncategorized'] || 0) + 1;
-        } else {
-            const primaryCategoryId = categoryIds[0];
-            const key = `category-${primaryCategoryId}`;
+        // Try to get current status
+        try {
+            const currentResponse = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/sync-status.json`
+            }));
             
-            if (!productsByCategory[key]) {
-                productsByCategory[key] = [];
+            currentStatus = JSON.parse(await currentResponse.Body.transformToString());
+        } catch (error) {
+            // File doesn't exist yet, use defaults
+        }
+        
+        // Merge with update
+        const updatedStatus = {
+            ...currentStatus,
+            ...statusUpdate,
+            lastUpdated: new Date().toISOString()
+        };
+        
+        // Store updated status
+        await s3Client.send(new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/sync-status.json`,
+            Body: JSON.stringify(updatedStatus),
+            ContentType: 'application/json'
+        }));
+        
+        console.log(`📊 Sync status updated: ${updatedStatus.status} (${updatedStatus.progress}%)`);
+        
+    } catch (error) {
+        console.error('❌ Failed to update sync status:', error);
+    }
+}
+
+// Fetch all products with comprehensive pagination
+async function fetchAllProducts(baseUrl, auth, onProgress = null) {
+    console.log('🔄 Fetching all products...');
+    const allProducts = [];
+    let page = 1;
+    
+    while (page <= 200) { // Increased limit for comprehensive sync
+        console.log(`📄 Fetching products page ${page}...`);
+        
+        try {
+            const products = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {
+                page,
+                per_page: 20,
+                status: 'any'
+            });
+            
+            if (!products || products.length === 0) break;
+            
+            allProducts.push(...products);
+            console.log(`✅ Loaded ${products.length} products (total: ${allProducts.length})`);
+            
+            // Report progress if callback provided
+            if (onProgress) {
+                onProgress(Math.min(page / 50, 0.6)); // Products = 60% of total progress
             }
             
-            productsByCategory[key].push(product);
-            categoryProductCounts[key] = (categoryProductCounts[key] || 0) + 1;
+            if (products.length < 20) break; // Last page
+            page++;
             
-            console.log(`Product "${product.name}" assigned to primary category: ${primaryCategoryId}`);
+            // Rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+        } catch (error) {
+            console.error(`❌ Failed to fetch products page ${page}:`, error.message);
+            break;
+        }
+    }
+    
+    console.log(`🎉 Total products fetched: ${allProducts.length}`);
+    return allProducts;
+}
+
+// Fetch all variations for variable products
+async function fetchAllVariations(baseUrl, auth, variableProducts, onProgress = null) {
+    console.log(`🔄 Fetching variations for ${variableProducts.length} variable products...`);
+    const allVariations = [];
+    
+    for (let i = 0; i < variableProducts.length; i++) {
+        const product = variableProducts[i];
+        
+        try {
+            console.log(`📄 Fetching variations for product ${product.id} (${i + 1}/${variableProducts.length})...`);
+            
+            const variations = await makeWordPressRequest(
+                baseUrl, 
+                `/wp-json/wc/v3/products/${product.id}/variations`, 
+                auth, 
+                { per_page: 100 }
+            );
+            
+            if (variations && variations.length > 0) {
+                const enhancedVariations = variations.map(variation => ({
+                    ...variation,
+                    parent_id: product.id,
+                    type: 'variation'
+                }));
+                
+                allVariations.push(...enhancedVariations);
+                console.log(`✅ Loaded ${variations.length} variations for product ${product.id}`);
+            }
+            
+            // Report progress if callback provided
+            if (onProgress) {
+                onProgress(0.6 + (i / variableProducts.length) * 0.2); // Variations = 20% of total progress
+            }
+            
+            // Rate limiting
+            await new Promise(resolve => setTimeout(resolve, 150));
+            
+        } catch (error) {
+            console.error(`⚠️ Failed to fetch variations for product ${product.id}:`, error.message);
+        }
+    }
+    
+    console.log(`🎉 Total variations fetched: ${allVariations.length}`);
+    return allVariations;
+}
+
+// Comprehensive data extraction (no time limits)
+async function extractWooCommerceData(url, username, appPassword, userId, syncId) {
+    console.log('🚀 Starting comprehensive WooCommerce data extraction...');
+    const startTime = Date.now();
+    
+    const baseUrl = url.startsWith('http') ? url : `https://${url}`;
+    const auth = Buffer.from(`${username}:${appPassword}`).toString('base64');
+    
+    try {
+        // Test connection first
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 5,
+            message: 'Testing WooCommerce connection...'
+        });
+        
+        try {
+            await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/system_status', auth);
+            console.log('✅ WooCommerce connection successful');
+        } catch (connectionError) {
+            throw new Error(`Cannot connect to WooCommerce API: ${connectionError.message}`);
+        }
+        
+        // Fetch core data
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 10,
+            message: 'Fetching products and categories...'
+        });
+        
+        const [products, categories] = await Promise.all([
+            fetchAllProducts(baseUrl, auth, (progress) => {
+                updateSyncStatus(userId, syncId, {
+                    status: 'processing',
+                    progress: 10 + (progress * 50), // 10-60%
+                    message: `Fetching products... (${Math.round(progress * 100)}%)`
+                });
+            }),
+            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/categories', auth, { per_page: 100 })
+        ]);
+        
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 65,
+            message: 'Fetching attributes and shipping classes...'
+        });
+        
+        // Fetch supplementary data
+        const [attributes, shippingClasses, tags] = await Promise.all([
+            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/attributes', auth, { per_page: 100 }),
+            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/shipping_classes', auth, { per_page: 100 }),
+            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/tags', auth, { per_page: 100 })
+        ]);
+        
+        // Fetch tax classes
+        let taxClasses = [];
+        try {
+            taxClasses = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/taxes/classes', auth);
+        } catch (error) {
+            console.warn('⚠️ Tax classes not available, using default');
+            taxClasses = [{ id: 1, slug: 'standard', name: 'Standard' }];
+        }
+        
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 70,
+            message: 'Fetching attribute terms...'
+        });
+        
+        // Fetch attribute terms
+        const enhancedAttributes = [];
+        for (let i = 0; i < (attributes || []).length; i++) {
+            const attribute = attributes[i];
+            try {
+                const terms = await makeWordPressRequest(
+                    baseUrl, 
+                    `/wp-json/wc/v3/products/attributes/${attribute.id}/terms`, 
+                    auth, 
+                    { per_page: 100 }
+                );
+                
+                enhancedAttributes.push({
+                    ...attribute,
+                    terms: terms || []
+                });
+                
+                console.log(`✅ Loaded ${terms?.length || 0} terms for attribute "${attribute.name}"`);
+            } catch (error) {
+                console.warn(`⚠️ Failed to fetch terms for attribute ${attribute.id}:`, error.message);
+                enhancedAttributes.push({ ...attribute, terms: [] });
+            }
+            
+            // Rate limiting and progress update
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await updateSyncStatus(userId, syncId, {
+                status: 'processing',
+                progress: 70 + ((i / attributes.length) * 10),
+                message: `Fetching attribute terms... (${i + 1}/${attributes.length})`
+            });
+        }
+        
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 80,
+            message: 'Fetching product variations...'
+        });
+        
+        // Fetch variations
+        const variableProducts = products.filter(p => p.type === 'variable');
+        const variations = await fetchAllVariations(baseUrl, auth, variableProducts, (progress) => {
+            updateSyncStatus(userId, syncId, {
+                status: 'processing',
+                progress: 80 + (progress - 0.6) * 50, // 80-90%
+                message: `Fetching variations... (${Math.round((progress - 0.6) * 250)}%)`
+            });
+        });
+        
+        const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`✅ Comprehensive data extraction completed in ${totalTime}s`);
+        
+        return {
+            products: products || [],
+            variations: variations || [],
+            categories: categories || [],
+            attributes: enhancedAttributes || [],
+            shippingClasses: shippingClasses || [],
+            taxClasses: taxClasses || [],
+            tags: tags || [],
+            totalProducts: products.length + variations.length,
+            extractedAt: new Date().toISOString(),
+            extractionTime: totalTime,
+            isComplete: true
+        };
+        
+    } catch (error) {
+        console.error('❌ Data extraction failed:', error);
+        throw new Error(`Failed to extract WooCommerce data: ${error.message}`);
+    }
+}
+
+// Normalize and structure data for new architecture
+function normalizeWooCommerceData(rawData) {
+    console.log('🔄 Normalizing WooCommerce data for new architecture...');
+    
+    const {
+        products: rawProducts,
+        variations: rawVariations,
+        categories: rawCategories,
+        attributes: rawAttributes,
+        shippingClasses: rawShippingClasses,
+        taxClasses: rawTaxClasses,
+        tags: rawTags
+    } = rawData;
+    
+    // 1. Normalize products
+    const normalizedProducts = {};
+    
+    // Add main products
+    rawProducts.forEach(product => {
+        normalizedProducts[product.id] = normalizeProduct(product);
+    });
+    
+    // Add variations as separate products
+    rawVariations.forEach(variation => {
+        normalizedProducts[variation.id] = normalizeProduct(variation);
+    });
+    
+    // 2. Normalize categories with hierarchy
+    const normalizedCategories = {};
+    const categoryHierarchy = { root: [] };
+    
+    rawCategories.forEach(category => {
+        normalizedCategories[category.id] = {
+            id: category.id,
+            name: category.name,
+            slug: category.slug,
+            parent_id: category.parent || 0,
+            description: category.description || '',
+            display: category.display || 'default',
+            image: category.image || null,
+            menu_order: category.menu_order || 0,
+            count: category.count || 0,
+            children: []
+        };
+        
+        // Build hierarchy
+        if (!category.parent || category.parent === 0) {
+            categoryHierarchy.root.push(category.id);
+        } else {
+            if (!categoryHierarchy[category.parent]) {
+                categoryHierarchy[category.parent] = [];
+            }
+            categoryHierarchy[category.parent].push(category.id);
         }
     });
     
-    // Create metadata with accurate category counts
-    const categoriesWithCounts = syncData.categories.map(category => ({
-        ...category,
-        productCount: categoryProductCounts[`category-${category.id}`] || 0
-    }));
+    // Update children arrays
+    Object.keys(categoryHierarchy).forEach(parentId => {
+        if (parentId !== 'root' && normalizedCategories[parentId]) {
+            normalizedCategories[parentId].children = categoryHierarchy[parentId] || [];
+        }
+    });
     
-    const metadata = {
-        categories: categoriesWithCounts,
-        totalProducts: syncData.totalProducts,
-        categoryProductCounts,
-        cachedAt: timestamp
-    };
-    
-    await s3Client.send(new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: `users/${userId}/metadata.json.gz`,
-        Body: zlib.gzipSync(JSON.stringify(metadata)),
-        ContentType: 'application/json',
-        ContentEncoding: 'gzip'
-    }));
-    
-    await s3Client.send(new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: `users/${userId}/credentials.json.gz`,
-        Body: zlib.gzipSync(JSON.stringify(credentials)),
-        ContentType: 'application/json',
-        ContentEncoding: 'gzip'
-    }));
-    
-    // Store each category's products
-    for (const [categoryKey, products] of Object.entries(productsByCategory)) {
-        if (products.length === 0) continue;
+    // 3. Normalize attributes
+    const normalizedAttributes = {};
+    rawAttributes.forEach(attribute => {
+        const terms = {};
+        (attribute.terms || []).forEach(term => {
+            terms[term.id] = {
+                id: term.id,
+                name: term.name,
+                slug: term.slug,
+                description: term.description || '',
+                count: term.count || 0
+            };
+        });
         
+        normalizedAttributes[attribute.id] = {
+            id: attribute.id,
+            name: attribute.name,
+            slug: attribute.slug,
+            type: attribute.type || 'select',
+            order_by: attribute.order_by || 'menu_order',
+            has_archives: attribute.has_archives || false,
+            terms: terms
+        };
+    });
+    
+    // 4. Normalize shipping classes
+    const normalizedShippingClasses = {};
+    rawShippingClasses.forEach(shippingClass => {
+        normalizedShippingClasses[shippingClass.id] = {
+            id: shippingClass.id,
+            name: shippingClass.name,
+            slug: shippingClass.slug,
+            description: shippingClass.description || '',
+            count: shippingClass.count || 0
+        };
+    });
+    
+    // 5. Normalize tax classes
+    const normalizedTaxClasses = {};
+    rawTaxClasses.forEach((taxClass, index) => {
+        const id = taxClass.id || index + 1;
+        normalizedTaxClasses[id] = {
+            id: id,
+            name: taxClass.name,
+            slug: taxClass.slug || taxClass.name?.toLowerCase().replace(/\s+/g, '-') || 'standard'
+        };
+    });
+    
+    // 6. Normalize tags
+    const normalizedTags = {};
+    rawTags.forEach(tag => {
+        normalizedTags[tag.id] = {
+            id: tag.id,
+            name: tag.name,
+            slug: tag.slug,
+            description: tag.description || '',
+            count: tag.count || 0
+        };
+    });
+    
+    console.log('✅ Data normalization completed');
+    console.log(`📊 Normalized: ${Object.keys(normalizedProducts).length} products, ${Object.keys(normalizedCategories).length} categories, ${Object.keys(normalizedAttributes).length} attributes`);
+    
+    return {
+        products: normalizedProducts,
+        categories: { categories: normalizedCategories, hierarchy: categoryHierarchy },
+        attributes: normalizedAttributes,
+        shippingClasses: normalizedShippingClasses,
+        taxClasses: normalizedTaxClasses,
+        tags: normalizedTags
+    };
+}
+
+// Normalize individual product data
+function normalizeProduct(product) {
+    // Extract category IDs
+    const categoryIds = (product.categories || []).map(cat => cat.id);
+    
+    // Extract tag IDs  
+    const tagIds = (product.tags || []).map(tag => tag.id);
+    
+    // Get shipping class ID
+    const shippingClassId = product.shipping_class_id || 
+        (product.shipping_class ? parseInt(product.shipping_class) : null);
+    
+    // Get tax class ID (will need mapping)
+    const taxClassId = product.tax_class || 'standard';
+    
+    // Normalize attributes
+    const attributes = (product.attributes || []).map(attr => ({
+        id: attr.id || 0,
+        name: attr.name,
+        slug: attr.slug || attr.name?.toLowerCase().replace(/\s+/g, '-'),
+        position: attr.position || 0,
+        visible: attr.visible !== false,
+        variation: attr.variation || false,
+        options: attr.options || []
+    }));
+    
+    // Handle variations (for variable products)
+    const variations = product.type === 'variable' ? 
+        (product.variations || []) : [];
+    
+    return {
+        id: product.id,
+        name: product.name || '',
+        slug: product.slug || '',
+        sku: product.sku || '',
+        type: product.type || 'simple',
+        status: product.status || 'publish',
+        featured: product.featured || false,
+        virtual: product.virtual || false,
+        downloadable: product.downloadable || false,
+        
+        // Parent ID for variations
+        ...(product.parent_id && { parent_id: product.parent_id }),
+        
+        // Pricing
+        regular_price: product.regular_price || '',
+        sale_price: product.sale_price || '',
+        date_on_sale_from: product.date_on_sale_from || '',
+        date_on_sale_to: product.date_on_sale_to || '',
+        
+        // Content
+        description: product.description || '',
+        short_description: product.short_description || '',
+        purchase_note: product.purchase_note || '',
+        
+        // Taxonomy (as IDs for relationships)
+        category_ids: categoryIds,
+        tag_ids: tagIds,
+        shipping_class_id: shippingClassId,
+        tax_class_id: taxClassId,
+        
+        // Attributes
+        attributes: attributes,
+        
+        // Inventory
+        manage_stock: product.manage_stock || false,
+        stock_quantity: product.stock_quantity || null,
+        stock_status: product.stock_status || 'instock',
+        backorders: product.backorders || 'no',
+        sold_individually: product.sold_individually || false,
+        low_stock_amount: product.low_stock_amount || null,
+        
+        // Shipping
+        weight: product.weight || '',
+        dimensions: product.dimensions || { length: '', width: '', height: '' },
+        
+        // Images
+        images: product.images || [],
+        
+        // Variable product data
+        ...(variations.length > 0 && { variations: variations }),
+        
+        // External product
+        external_url: product.external_url || '',
+        button_text: product.button_text || '',
+        
+        // Downloads
+        downloads: product.downloads || [],
+        download_limit: product.download_limit || -1,
+        download_expiry: product.download_expiry || -1,
+        
+        // Meta
+        menu_order: product.menu_order || 0,
+        reviews_allowed: product.reviews_allowed !== false,
+        average_rating: product.average_rating || '0',
+        rating_count: product.rating_count || 0,
+        date_created: product.date_created || '',
+        date_modified: product.date_modified || '',
+        
+        // Catalog
+        catalog_visibility: product.catalog_visibility || 'visible'
+    };
+}
+
+// Build query optimization indexes
+function buildIndexes(normalizedData) {
+    console.log('🔄 Building query optimization indexes...');
+    
+    const { products, categories } = normalizedData;
+    
+    // 1. Category index
+    const categoryProducts = {};
+    const productCategories = {};
+    
+    Object.values(products).forEach(product => {
+        if (product.category_ids && product.category_ids.length > 0) {
+            // Add product to each category
+            product.category_ids.forEach(categoryId => {
+                if (!categoryProducts[categoryId]) {
+                    categoryProducts[categoryId] = [];
+                }
+                categoryProducts[categoryId].push(product.id);
+            });
+            
+            // Track which categories this product belongs to
+            productCategories[product.id] = product.category_ids;
+        } else {
+            // Uncategorized products
+            if (!categoryProducts['uncategorized']) {
+                categoryProducts['uncategorized'] = [];
+            }
+            categoryProducts['uncategorized'].push(product.id);
+            productCategories[product.id] = ['uncategorized'];
+        }
+    });
+    
+    // 2. Status index
+    const statusProducts = {};
+    Object.values(products).forEach(product => {
+        if (!statusProducts[product.status]) {
+            statusProducts[product.status] = [];
+        }
+        statusProducts[product.status].push(product.id);
+    });
+    
+    // 3. Type index
+    const typeProducts = {};
+    Object.values(products).forEach(product => {
+        if (!typeProducts[product.type]) {
+            typeProducts[product.type] = [];
+        }
+        typeProducts[product.type].push(product.id);
+    });
+    
+    // 4. Search index (basic)
+    const searchIndex = {};
+    Object.values(products).forEach(product => {
+        const searchTerms = [
+            product.name,
+            product.sku,
+            product.description,
+            product.short_description
+        ].filter(Boolean).join(' ').toLowerCase().split(/\s+/);
+        
+        searchTerms.forEach(term => {
+            if (term.length > 2) { // Only index terms longer than 2 characters
+                if (!searchIndex[term]) {
+                    searchIndex[term] = [];
+                }
+                if (!searchIndex[term].includes(product.id)) {
+                    searchIndex[term].push(product.id);
+                }
+            }
+        });
+    });
+    
+    console.log('✅ Index building completed');
+    console.log(`📊 Built indexes: ${Object.keys(categoryProducts).length} categories, ${Object.keys(statusProducts).length} statuses, ${Object.keys(typeProducts).length} types`);
+    
+    return {
+        byCategoryIndex: {
+            category_products: categoryProducts,
+            product_categories: productCategories,
+            last_updated: new Date().toISOString()
+        },
+        byStatusIndex: {
+            status_products: statusProducts,
+            last_updated: new Date().toISOString()
+        },
+        byTypeIndex: {
+            type_products: typeProducts,
+            last_updated: new Date().toISOString()
+        },
+        searchIndex: {
+            search_terms: searchIndex,
+            last_updated: new Date().toISOString()
+        }
+    };
+}
+
+// Store all data in new S3 architecture
+async function storeInS3(userId, normalizedData, syncId) {
+    console.log('💾 Storing data in new S3 architecture...');
+    const timestamp = new Date().toISOString();
+    
+    try {
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 90,
+            message: 'Building indexes and preparing files...'
+        });
+        
+        // Build indexes
+        const indexes = buildIndexes(normalizedData);
+        
+        // Prepare all files for upload
+        const files = [
+            // Core data files
+            {
+                key: `users/${userId}/products.json.gz`,
+                data: {
+                    products: normalizedData.products,
+                    total_count: Object.keys(normalizedData.products).length,
+                    last_updated: timestamp,
+                    sync_version: '2.0'
+                }
+            },
+            {
+                key: `users/${userId}/categories.json.gz`,
+                data: {
+                    ...normalizedData.categories,
+                    last_updated: timestamp
+                }
+            },
+            {
+                key: `users/${userId}/attributes.json.gz`,
+                data: {
+                    attributes: normalizedData.attributes,
+                    custom_attributes: {},
+                    last_updated: timestamp
+                }
+            },
+            {
+                key: `users/${userId}/shipping-classes.json.gz`,
+                data: {
+                    shipping_classes: normalizedData.shippingClasses,
+                    last_updated: timestamp
+                }
+            },
+            {
+                key: `users/${userId}/tax-classes.json.gz`,
+                data: {
+                    tax_classes: normalizedData.taxClasses,
+                    last_updated: timestamp
+                }
+            },
+            {
+                key: `users/${userId}/tags.json.gz`,
+                data: {
+                    tags: normalizedData.tags,
+                    last_updated: timestamp
+                }
+            },
+            
+            // Index files
+            {
+                key: `users/${userId}/indexes/by-category.json.gz`,
+                data: indexes.byCategoryIndex
+            },
+            {
+                key: `users/${userId}/indexes/by-status.json.gz`,
+                data: indexes.byStatusIndex
+            },
+            {
+                key: `users/${userId}/indexes/by-type.json.gz`,
+                data: indexes.byTypeIndex
+            },
+            {
+                key: `users/${userId}/indexes/search-index.json.gz`,
+                data: indexes.searchIndex
+            },
+            
+            // Store metadata
+            {
+                key: `users/${userId}/store-metadata.json.gz`,
+                data: {
+                    store_info: {
+                        total_products: Object.keys(normalizedData.products).length,
+                        total_categories: Object.keys(normalizedData.categories.categories).length,
+                        total_attributes: Object.keys(normalizedData.attributes).length,
+                        total_shipping_classes: Object.keys(normalizedData.shippingClasses).length,
+                        total_tags: Object.keys(normalizedData.tags).length
+                    },
+                    sync_status: {
+                        last_sync: timestamp,
+                        sync_version: '2.0',
+                        status: 'completed'
+                    },
+                    architecture_version: '2.0'
+                }
+            }
+        ];
+        
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 95,
+            message: `Uploading ${files.length} files to S3...`
+        });
+        
+        // Upload all files
+        await Promise.all(files.map(async (file) => {
+            const compressedData = zlib.gzipSync(JSON.stringify(file.data));
+            
+            await s3Client.send(new PutObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: file.key,
+                Body: compressedData,
+                ContentType: 'application/json',
+                ContentEncoding: 'gzip'
+            }));
+            
+            console.log(`✅ Uploaded: ${file.key.split('/').pop()}`);
+        }));
+        
+        console.log('🎉 All data successfully stored in new S3 architecture!');
+        
+        return {
+            success: true,
+            architecture_version: '2.0',
+            files_created: files.length,
+            total_products: Object.keys(normalizedData.products).length,
+            sync_completed_at: timestamp
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to store data in S3:', error);
+        throw new Error(`S3 storage failed: ${error.message}`);
+    }
+}
+
+// Background sync processor (handles async invocation)
+async function processBackgroundSync(event) {
+    const { userId, syncId, credentials } = event;
+    const { url, username, appPassword } = credentials;
+    
+    console.log(`🚀 Starting background sync for user: ${userId}, syncId: ${syncId}`);
+    console.log(`📍 Store URL: ${url}`);
+    
+    try {
+        // Perform comprehensive sync
+        const rawData = await extractWooCommerceData(url, username, appPassword, userId, syncId);
+        
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 85,
+            message: 'Normalizing data structure...'
+        });
+        
+        const normalizedData = normalizeWooCommerceData(rawData);
+        
+        const storeResult = await storeInS3(userId, normalizedData, syncId);
+        
+        // Store credentials
+        const credentialsData = { url, username, appPassword };
         await s3Client.send(new PutObjectCommand({
             Bucket: BUCKET_NAME,
-            Key: `users/${userId}/categories/${categoryKey}/products.json.gz`,
-            Body: zlib.gzipSync(JSON.stringify({ products, categoryKey })),
+            Key: `users/${userId}/credentials.json.gz`,
+            Body: zlib.gzipSync(JSON.stringify(credentialsData)),
             ContentType: 'application/json',
             ContentEncoding: 'gzip'
         }));
+        
+        // Update final status
+        await updateSyncStatus(userId, syncId, {
+            status: 'completed',
+            progress: 100,
+            message: 'Sync completed successfully',
+            completedAt: new Date().toISOString(),
+            result: {
+                ...storeResult,
+                metadata: {
+                    totalProducts: Object.keys(normalizedData.products).length,
+                    totalCategories: Object.keys(normalizedData.categories.categories).length,
+                    totalAttributes: Object.keys(normalizedData.attributes).length,
+                    extractedAt: rawData.extractedAt,
+                    isComplete: rawData.isComplete
+                }
+            }
+        });
+        
+        console.log('🎉 Background sync completed successfully');
+        
+    } catch (error) {
+        console.error('❌ Background sync failed:', error);
+        
+        await updateSyncStatus(userId, syncId, {
+            status: 'failed',
+            progress: 0,
+            message: `Sync failed: ${error.message}`,
+            failedAt: new Date().toISOString(),
+            error: error.message
+        });
     }
-    
-    console.log(`✅ Stored products in ${Object.keys(productsByCategory).length} categories (no duplicates)`);
-    
-    return { success: true, categoriesStored: Object.keys(productsByCategory).length };
 }
 
+// Get user credentials from S3
 async function getUserCredentials(userId) {
     try {
         const response = await s3Client.send(new GetObjectCommand({
@@ -257,90 +961,207 @@ async function getUserCredentials(userId) {
 }
 
 export async function handleSync(event, userId) {
-    if (event.httpMethod === 'GET' && event.queryStringParameters?.action === 'init-auth') {
-        const storeUrl = event.queryStringParameters?.url;
-        if (!storeUrl) {
-            return {
-                statusCode: 400,
-                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ success: false, error: 'Store URL required' })
-            };
-        }
-        
-        const result = await initializeWordPressAuth(storeUrl);
+    console.log(`🔄 Sync handler called: ${event.httpMethod}, userId: ${userId}`);
+    console.log(`📋 Query params:`, event.queryStringParameters);
+    
+    // Handle background sync processing (from async invocation)
+    if (event.source === 'async-sync') {
+        await processBackgroundSync(event);
         return {
             statusCode: 200,
-            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-            body: JSON.stringify(result)
+            body: JSON.stringify({ success: true, message: 'Background sync completed' })
         };
     }
     
-    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'resync') {
+    // Handle WordPress auth initialization
+    if (event.httpMethod === 'GET' && event.queryStringParameters?.action === 'init-auth') {
+        const storeUrl = event.queryStringParameters.url;
+        
         try {
-            const credentials = await getUserCredentials(userId);
+            const result = await initializeWordPressAuth(storeUrl);
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify(result)
+            };
+        } catch (error) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: error.message })
+            };
+        }
+    }
+    
+    // Handle sync status check
+    if (event.httpMethod === 'GET' && event.queryStringParameters?.action === 'sync-status') {
+        try {
+            const response = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/sync-status.json`
+            }));
             
-            if (!credentials) {
+            const statusData = JSON.parse(await response.Body.transformToString());
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify(statusData)
+            };
+            
+        } catch (error) {
+            if (error.name === 'NoSuchKey') {
                 return {
-                    statusCode: 400,
+                    statusCode: 200,
                     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        success: false, 
-                        error: 'No stored credentials found. Please reconnect your store.' 
+                        status: 'not_found', 
+                        message: 'No sync in progress' 
                     })
                 };
             }
             
-            const syncData = await syncWordPress(credentials.url, credentials.username, credentials.appPassword);
-            const storeResult = await storeData(userId, syncData, credentials);
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: error.message })
+            };
+        }
+    }
+    
+    // Handle POST requests (sync operations)
+    if (event.httpMethod === 'POST') {
+        console.log(`🔄 Processing sync request for user: ${userId}`);
+        
+        try {
+            let requestData;
+            try {
+                requestData = JSON.parse(event.body || '{}');
+            } catch (parseError) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'Invalid JSON in request body' })
+                };
+            }
+            
+            // Handle resync with stored credentials
+            if (event.queryStringParameters?.action === 'resync') {
+                console.log('🔄 Re-sync requested - using stored credentials');
+                
+                try {
+                    const credentials = await getUserCredentials(userId);
+                    
+                    if (!credentials) {
+                        return {
+                            statusCode: 400,
+                            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                success: false, 
+                                error: 'No stored credentials found. Please reconnect your store.'
+                            })
+                        };
+                    }
+                    
+                    // Start async sync
+                    const syncId = generateUUID();
+                    
+                    // Store initial sync status
+                    await updateSyncStatus(userId, syncId, {
+                        status: 'started',
+                        progress: 0,
+                        message: 'Sync started...',
+                        syncType: 'resync'
+                    });
+                    
+                    // Invoke Lambda function asynchronously
+                    await lambdaClient.send(new InvokeCommand({
+                        FunctionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
+                        InvocationType: 'Event',
+                        Payload: JSON.stringify({
+                            source: 'async-sync',
+                            userId: userId,
+                            syncId: syncId,
+                            credentials: credentials
+                        })
+                    }));
+                    
+                    return {
+                        statusCode: 200,
+                        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            success: true,
+                            syncId: syncId,
+                            message: 'Re-sync started in background',
+                            statusUrl: `?action=sync-status&syncId=${syncId}`
+                        })
+                    };
+                    
+                } catch (error) {
+                    console.error('Re-sync error:', error);
+                    return {
+                        statusCode: 500,
+                        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ success: false, error: error.message })
+                    };
+                }
+            }
+            
+            // Handle initial sync
+            const { url, username, appPassword } = requestData;
+            
+            if (!url || !username || !appPassword) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'Missing required fields: url, username, appPassword' })
+                };
+            }
+            
+            console.log(`🔗 Starting async sync for store: ${url}`);
+            
+            // Start async sync
+            const syncId = generateUUID();
+            
+            // Store initial sync status
+            await updateSyncStatus(userId, syncId, {
+                status: 'started',
+                progress: 0,
+                message: 'Initial sync started...',
+                syncType: 'initial'
+            });
+            
+            // Invoke Lambda function asynchronously
+            await lambdaClient.send(new InvokeCommand({
+                FunctionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
+                InvocationType: 'Event',
+                Payload: JSON.stringify({
+                    source: 'async-sync',
+                    userId: userId,
+                    syncId: syncId,
+                    credentials: { url, username, appPassword }
+                })
+            }));
             
             return {
                 statusCode: 200,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     success: true,
-                    structure: 'categorized',
-                    metadata: { categories: syncData.categories, totalProducts: syncData.totalProducts },
-                    categoriesStored: storeResult.categoriesStored
+                    syncId: syncId,
+                    message: 'Sync started in background',
+                    statusUrl: `?action=sync-status&syncId=${syncId}`
                 })
             };
             
         } catch (error) {
-            console.error('Resync error:', error);
+            console.error('Sync error:', error);
             return {
                 statusCode: 500,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    success: false, 
-                    error: error.message 
-                })
+                body: JSON.stringify({ success: false, error: error.message })
             };
         }
-    }
-    
-    if (event.httpMethod === 'POST') {
-        const { url, username, appPassword } = JSON.parse(event.body || '{}');
-        
-        if (!url || !username || !appPassword) {
-            return {
-                statusCode: 400,
-                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ success: false, error: 'URL, username, and app password required' })
-            };
-        }
-        
-        const syncData = await syncWordPress(url, username, appPassword);
-        const storeResult = await storeData(userId, syncData, { url, username, appPassword });
-        
-        return {
-            statusCode: 200,
-            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                success: true,
-                structure: 'categorized',
-                metadata: { categories: syncData.categories, totalProducts: syncData.totalProducts },
-                categoriesStored: storeResult.categoriesStored
-            })
-        };
     }
     
     return {

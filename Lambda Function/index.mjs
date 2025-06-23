@@ -61,6 +61,13 @@ export const handler = async (event) => {
             return await handleStripe(event, null); // No userId needed for webhooks
         }
         
+        // *** Handle async invocations differently ***
+        if (event.source === 'async-sync') {
+            console.log('🔄 Async sync invocation detected - no JWT extraction needed');
+            // For async invocations, userId is in the payload
+            return await handleSync(event, null);
+        }
+
         // *** ALL OTHER REQUESTS - Require Authentication ***
         console.log('🔒 Non-webhook request - extracting user ID from JWT');
         const userId = extractUserId(event);
@@ -89,8 +96,8 @@ export const handler = async (event) => {
             return await handleAccount(event, userId);
         }
         
-        // Sync operations: init-auth (GET), sync (POST without action), and resync
-        if (action === 'init-auth' || action === 'resync' || (event.httpMethod === 'POST' && !action)) {
+        // Sync operations: init-auth (GET), sync (POST without action), resync, and sync-status
+        if (action === 'init-auth' || action === 'resync' || action === 'sync-status' || (event.httpMethod === 'POST' && !action)) {
             console.log('🔄 Routing to Sync handler');
             return await handleSync(event, userId);
         }
