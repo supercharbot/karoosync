@@ -1,7 +1,10 @@
 const API_ENDPOINT = process.env.REACT_APP_API_ENDPOINT || 'https://ofbdn9zezl.execute-api.ap-southeast-2.amazonaws.com/v1/sync';
 
+// Core API request function with better error handling
 async function makeRequest(url, options = {}) {
   try {
+    console.log('🌐 API Request:', url, options.method || 'GET');
+    
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
@@ -10,19 +13,30 @@ async function makeRequest(url, options = {}) {
       ...options
     });
 
+    console.log('🌐 API Response:', response.status, response.statusText);
+
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('🌐 API Error Response:', errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log('🌐 API Result:', result);
+    return result;
+    
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('🌐 API Error:', error);
     throw error;
   }
 }
 
+// ============================================
+// DATA CHECKING FUNCTIONS
+// ============================================
+
 export async function checkUserData(authToken) {
-  console.log('Checking user data...');
+  console.log('🔍 Checking user data...');
   
   const result = await makeRequest(`${API_ENDPOINT}?action=check-data`, {
     headers: { Authorization: `Bearer ${authToken}` }
@@ -32,7 +46,7 @@ export async function checkUserData(authToken) {
 }
 
 export async function loadCategoryProducts(categoryKey, authToken) {
-  console.log(`Loading category: ${categoryKey}`);
+  console.log(`🔍 Loading category: ${categoryKey}`);
   
   const result = await makeRequest(`${API_ENDPOINT}?action=load-category&category=${encodeURIComponent(categoryKey)}`, {
     headers: { Authorization: `Bearer ${authToken}` }
@@ -42,7 +56,7 @@ export async function loadCategoryProducts(categoryKey, authToken) {
 }
 
 export async function loadVariations(productId, authToken) {
-  console.log(`Loading variations for product: ${productId}`);
+  console.log(`🔍 Loading variations for product: ${productId}`);
   
   const result = await makeRequest(`${API_ENDPOINT}?action=load-variations&productId=${productId}`, {
     headers: { Authorization: `Bearer ${authToken}` }
@@ -51,8 +65,12 @@ export async function loadVariations(productId, authToken) {
   return result;
 }
 
+// ============================================
+// WORDPRESS AUTH & SYNC FUNCTIONS
+// ============================================
+
 export async function initializeWordPressAuth(storeUrl, authToken) {
-  console.log('Initializing WordPress auth...');
+  console.log('🔐 Initializing WordPress auth for:', storeUrl);
   
   const result = await makeRequest(`${API_ENDPOINT}?action=init-auth&url=${encodeURIComponent(storeUrl)}`, {
     headers: { Authorization: `Bearer ${authToken}` }
@@ -61,8 +79,9 @@ export async function initializeWordPressAuth(storeUrl, authToken) {
   return result;
 }
 
+// Legacy sync function (kept for compatibility)
 export async function syncWordPressStore(credentials, authToken) {
-  console.log('Starting async WordPress store sync...');
+  console.log('🔄 Starting legacy WordPress store sync...');
   
   const result = await makeRequest(API_ENDPOINT, {
     method: 'POST',
@@ -77,8 +96,11 @@ export async function syncWordPressStore(credentials, authToken) {
   return result;
 }
 
+// New async sync function
 export async function startAsyncSync(credentials, authToken) {
-  console.log('Starting async WordPress sync...');
+  console.log('🚀 Starting async WordPress sync...');
+  console.log('🚀 Store URL:', credentials.url);
+  console.log('🚀 Username:', credentials.username);
   
   const result = await makeRequest(API_ENDPOINT, {
     method: 'POST',
@@ -90,43 +112,73 @@ export async function startAsyncSync(credentials, authToken) {
     })
   });
 
+  console.log('🚀 Async sync response:', result);
   return result;
 }
 
+// New async resync function
 export async function startAsyncResync(authToken) {
-  console.log('Starting async WordPress resync...');
+  console.log('🔄 Starting async WordPress resync...');
   
   const result = await makeRequest(`${API_ENDPOINT}?action=resync`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${authToken}` }
   });
 
+  console.log('🔄 Async resync response:', result);
   return result;
 }
 
+// Get sync status function (critical for progress updates)
 export async function getSyncStatus(authToken) {
-  console.log('Getting sync status...');
+  console.log('📊 Getting sync status...');
   
-  const result = await makeRequest(`${API_ENDPOINT}?action=sync-status`, {
-    headers: { Authorization: `Bearer ${authToken}` }
-  });
+  try {
+    const result = await makeRequest(`${API_ENDPOINT}?action=sync-status`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
 
-  return result;
+    console.log('📊 Sync status response:', result);
+    
+    // Handle different response formats
+    if (result && typeof result === 'object') {
+      // If the response is the status object directly
+      if (result.status || result.syncId || result.progress !== undefined) {
+        return result;
+      }
+      
+      // If the response is wrapped (some APIs return {success: true, data: {...}})
+      if (result.success && result.data) {
+        return result.data;
+      }
+      
+      // If it's a "not found" response but still valid
+      if (result.status === 'not_found' || result.message === 'No sync in progress') {
+        return { status: 'not_found', message: 'No sync in progress' };
+      }
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.error('📊 Error getting sync status:', error);
+    
+    // If it's a 404, that means no sync in progress
+    if (error.message.includes('404')) {
+      return { status: 'not_found', message: 'No sync in progress' };
+    }
+    
+    throw error;
+  }
 }
 
-export async function resyncWordPressStore(authToken) {
-  console.log('Re-syncing WordPress store with stored credentials...');
-  
-  const result = await makeRequest(`${API_ENDPOINT}?action=resync`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${authToken}` }
-  });
-
-  return result;
-}
+// ============================================
+// PRODUCT MANAGEMENT FUNCTIONS
+// ============================================
 
 export async function updateProduct(productId, productData, authToken) {
-  console.log(`Updating product: ${productId}`);
+  console.log(`📝 Updating product: ${productId}`);
   
   const result = await makeRequest(API_ENDPOINT, {
     method: 'PUT',
@@ -141,7 +193,7 @@ export async function updateProduct(productId, productData, authToken) {
 }
 
 export async function createCategory(categoryData, authToken) {
-  console.log('Creating category:', categoryData.name);
+  console.log('📁 Creating category:', categoryData.name);
   
   const result = await makeRequest(`${API_ENDPOINT}?action=create-category`, {
     method: 'POST',
@@ -153,7 +205,7 @@ export async function createCategory(categoryData, authToken) {
 }
 
 export async function deleteCategory(categoryId, authToken) {
-  console.log(`Deleting category: ${categoryId}`);
+  console.log(`🗑️ Deleting category: ${categoryId}`);
   
   const result = await makeRequest(`${API_ENDPOINT}?action=delete-category&categoryId=${categoryId}`, {
     method: 'DELETE',
@@ -168,7 +220,7 @@ export async function deleteCategory(categoryId, authToken) {
 // ============================================
 
 export async function deleteAccount(authToken) {
-  console.log('Deleting account...');
+  console.log('🗑️ Deleting account...');
   
   const result = await makeRequest(`${API_ENDPOINT}?action=delete-account`, {
     method: 'DELETE',
@@ -179,7 +231,7 @@ export async function deleteAccount(authToken) {
 }
 
 export async function createBackup(backupName, authToken) {
-  console.log('Creating backup:', backupName);
+  console.log('💾 Creating backup:', backupName);
   
   const result = await makeRequest(`${API_ENDPOINT}?action=create-backup`, {
     method: 'POST',
@@ -193,7 +245,7 @@ export async function createBackup(backupName, authToken) {
 }
 
 export async function getBackupStatus(authToken) {
-  console.log('Getting backup status...');
+  console.log('📋 Getting backup status...');
   
   const result = await makeRequest(`${API_ENDPOINT}?action=backup-status`, {
     headers: { Authorization: `Bearer ${authToken}` }
@@ -203,7 +255,7 @@ export async function getBackupStatus(authToken) {
 }
 
 export async function downloadBackup(authToken) {
-  console.log('Downloading backup...');
+  console.log('⬇️ Downloading backup...');
   
   const result = await makeRequest(`${API_ENDPOINT}?action=download-backup`, {
     headers: { Authorization: `Bearer ${authToken}` }
@@ -213,7 +265,7 @@ export async function downloadBackup(authToken) {
 }
 
 export async function exportData(format, dataTypes, authToken) {
-  console.log('Exporting data:', format, dataTypes);
+  console.log('📤 Exporting data:', format, dataTypes);
   
   const result = await makeRequest(`${API_ENDPOINT}?action=export-data`, {
     method: 'POST',
@@ -225,4 +277,72 @@ export async function exportData(format, dataTypes, authToken) {
   });
 
   return result;
+}
+
+// ============================================
+// SUBSCRIPTION MANAGEMENT FUNCTIONS (if you use Stripe)
+// ============================================
+
+export async function getSubscriptionStatus(authToken) {
+  console.log('💳 Getting subscription status...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=get-subscription-status`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
+export async function createSubscription(priceId, authToken) {
+  console.log('💳 Creating subscription...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=create-subscription`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ priceId })
+  });
+
+  return result;
+}
+
+export async function cancelSubscription(authToken) {
+  console.log('💳 Canceling subscription...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=cancel-subscription`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
+// Test API connection
+export async function testConnection(authToken) {
+  console.log('🔍 Testing API connection...');
+  
+  try {
+    const result = await makeRequest(API_ENDPOINT, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    
+    return { success: true, ...result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Get API health status
+export async function getHealthStatus() {
+  console.log('❤️ Getting API health status...');
+  
+  try {
+    const result = await makeRequest(API_ENDPOINT);
+    return { success: true, ...result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 }
