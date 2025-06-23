@@ -62,7 +62,7 @@ export async function initializeWordPressAuth(storeUrl, authToken) {
 }
 
 export async function syncWordPressStore(credentials, authToken) {
-  console.log('Syncing WordPress store...');
+  console.log('Starting async WordPress store sync...');
   
   const result = await makeRequest(API_ENDPOINT, {
     method: 'POST',
@@ -72,6 +72,43 @@ export async function syncWordPressStore(credentials, authToken) {
       username: credentials.username,
       appPassword: credentials.appPassword
     })
+  });
+
+  return result;
+}
+
+export async function startAsyncSync(credentials, authToken) {
+  console.log('Starting async WordPress sync...');
+  
+  const result = await makeRequest(API_ENDPOINT, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({
+      url: credentials.url,
+      username: credentials.username,
+      appPassword: credentials.appPassword
+    })
+  });
+
+  return result;
+}
+
+export async function startAsyncResync(authToken) {
+  console.log('Starting async WordPress resync...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=resync`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
+export async function getSyncStatus(authToken) {
+  console.log('Getting sync status...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=sync-status`, {
+    headers: { Authorization: `Bearer ${authToken}` }
   });
 
   return result;

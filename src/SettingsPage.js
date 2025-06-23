@@ -17,7 +17,7 @@ import {
 import { useAuth } from './AuthContext';
 import { useTheme } from './ThemeContext';
 import { updateUserAttributes, fetchUserAttributes } from 'aws-amplify/auth';
-import { resyncWordPressStore } from './api';
+import { startAsyncResync, getSyncStatus } from './api';
 import { 
   syncWordPressStore, 
   deleteAccount, 
@@ -27,6 +27,7 @@ import {
   exportData 
 } from './api';
 import LoadingScreen from './LoadingScreen';
+import SyncProgress from './SyncProgress';
 
 // Move BackupModal outside the main component to prevent re-creation
 const BackupModal = React.memo(({ 
@@ -336,6 +337,8 @@ const SettingsPage = () => {
   });
   
   const [syncing, setSyncing] = useState(false);
+  const [syncId, setSyncId] = useState(null);
+  const [showSyncProgress, setShowSyncProgress] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -454,26 +457,46 @@ const SettingsPage = () => {
     setShowConfirmDialog(false);
     setConfirmText('');
     setSyncing(true);
-    setSyncStatus('Initializing sync...');
+    setSyncStatus('Starting resync...');
 
     try {
       const authToken = await getAuthToken();
-      const result = await resyncWordPressStore(authToken);
+      const result = await startAsyncResync(authToken);
 
       if (result.success) {
-        setSyncStatus('Sync completed successfully!');
-        setTimeout(() => setSyncStatus(''), 5000);
+        setSyncId(result.syncId);
+        setShowSyncProgress(true);
+        setSyncStatus(`Sync started in background (ID: ${result.syncId})`);
       } else {
         setSyncStatus(`Sync failed: ${result.error}`);
+        setSyncing(false);
         setTimeout(() => setSyncStatus(''), 10000);
       }
     } catch (error) {
       console.error('Sync error:', error);
       setSyncStatus(`Error during sync: ${error.message}`);
-      setTimeout(() => setSyncStatus(''), 10000);
-    } finally {
       setSyncing(false);
+      setTimeout(() => setSyncStatus(''), 10000);
     }
+  };
+
+  const handleSyncComplete = (result) => {
+    setSyncing(false);
+    setSyncId(null);
+    setShowSyncProgress(false);
+    setSyncStatus('Sync completed successfully! Refreshing app...');
+    
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
+  };
+
+  const handleSyncError = (errorMessage) => {
+    setSyncing(false);
+    setSyncId(null);
+    setShowSyncProgress(false);
+    setSyncStatus(`Sync failed: ${errorMessage}`);
+    setTimeout(() => setSyncStatus(''), 10000);
   };
 
   const handleCreateBackup = async () => {
@@ -653,6 +676,21 @@ const SettingsPage = () => {
   }
 
   const hasUnsavedChanges = settings.darkMode !== currentTheme;
+
+  // Show sync progress overlay if sync is in progress
+  if (showSyncProgress && syncId) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="max-w-md w-full mx-4">
+          <SyncProgress 
+            syncId={syncId}
+            onComplete={handleSyncComplete}
+            onError={handleSyncError}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-73px)]">

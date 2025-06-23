@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { ThemeProvider } from './ThemeContext'; // Import here instead
-import { checkUserData, syncWordPressStore } from './api';
+import { checkUserData, startAsyncSync, getSyncStatus } from './api';
 import LoadingScreen from './LoadingScreen';
 import SyncForm from './SyncForm';
 import MainLayout from './MainLayout';
+import SyncProgress from './SyncProgress';
 
 const App = () => {
   const { user, getAuthToken } = useAuth();
   const [currentView, setCurrentView] = useState('checking');
   const [userData, setUserData] = useState(null);
   const [error, setError] = useState('');
+  const [syncId, setSyncId] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -38,10 +40,7 @@ const App = () => {
   }, [user]);
 
   const handleOAuthReturn = async (password, userLogin) => {
-    setCurrentView('syncing');
-
     try {
-      // Extract store URL from URL parameters (we'll add this to the auth flow)
       const urlParams = new URLSearchParams(window.location.search);
       const storeUrl = urlParams.get('store_url') || 
                        sessionStorage.getItem('karoosync_store_url');
@@ -59,14 +58,14 @@ const App = () => {
         appPassword: password
       };
 
-      console.log('Attempting sync with credentials for:', credentials.url);
+      console.log('Starting async sync with OAuth credentials...');
 
       const authToken = await getAuthToken();
-      const result = await syncWordPressStore(credentials, authToken);
+      const result = await startAsyncSync(credentials, authToken);
       
       if (result.success) {
-        setUserData(result);
-        setCurrentView('main');
+        setSyncId(result.syncId);
+        setCurrentView('syncing');
         sessionStorage.removeItem('karoosync_store_url');
       } else {
         throw new Error(result.error || 'Store sync failed');
@@ -99,7 +98,14 @@ const App = () => {
 
   const handleSyncComplete = (syncResult) => {
     setUserData(syncResult);
+    setSyncId(null);
     setCurrentView('main');
+  };
+
+  const handleSyncError = (errorMessage) => {
+    setError(errorMessage);
+    setSyncId(null);
+    setCurrentView('sync');
   };
 
   const handleReset = () => {
@@ -114,6 +120,17 @@ const App = () => {
   }
 
   if (currentView === 'syncing') {
+    if (syncId) {
+      return (
+        <ThemeProvider>
+          <SyncProgress 
+            syncId={syncId}
+            onComplete={handleSyncComplete}
+            onError={handleSyncError}
+          />
+        </ThemeProvider>
+      );
+    }
     return <LoadingScreen message="Processing WordPress authorization..." />;
   }
 
