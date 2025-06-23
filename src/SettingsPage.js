@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { useTheme } from './ThemeContext';
+import { fetchUserAttributes, updateUserAttributes } from 'aws-amplify/auth';
 import { 
   startAsyncResync, 
   createBackup, 
@@ -20,7 +21,8 @@ import {
   Moon,
   Sun,
   X,
-  Loader2 
+  Loader2,
+  CheckCircle 
 } from 'lucide-react';
 
 // Modal Components (inline)
@@ -119,10 +121,10 @@ const BackupModal = React.memo(({
         </div>
         
         <div className="space-y-4 mb-6">
-          {currentBackup && (
+          {currentBackup.exists && (
             <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg">
               <p className="text-sm text-amber-800 dark:text-amber-200">
-                <strong>Note:</strong> Creating a new backup will replace your existing backup.
+                <strong>Note:</strong> Creating a new backup will replace your existing backup from {currentBackup.date}.
               </p>
             </div>
           )}
@@ -136,11 +138,38 @@ const BackupModal = React.memo(({
               value={backupName}
               onChange={(e) => setBackupName(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              placeholder="My Backup"
+              placeholder="Product Backup"
               autoComplete="off"
               disabled={isCreatingBackup}
             />
           </div>
+          
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              This backup will include all your products in comprehensive CSV format with {currentBackup.exists ? currentBackup.fieldCount || '38' : '38'} fields for easy viewing in Excel or Google Sheets.
+            </p>
+          </div>
+
+          {isCreatingBackup && (
+            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    Creating backup...
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Processing your products and generating CSV file
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <div className="bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                  <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: '70%' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         
         <div className="flex gap-3">
@@ -149,7 +178,7 @@ const BackupModal = React.memo(({
             disabled={isCreatingBackup}
             className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
           >
-            Cancel
+            {isCreatingBackup ? 'Please wait...' : 'Cancel'}
           </button>
           <button
             onClick={onCreateBackup}
@@ -162,7 +191,7 @@ const BackupModal = React.memo(({
                 Creating...
               </>
             ) : (
-              'Create Backup'
+              currentBackup.exists ? 'Replace Backup' : 'Create Backup'
             )}
           </button>
         </div>
@@ -208,8 +237,8 @@ const DownloadModal = React.memo(({
               onChange={(e) => setDownloadFormat(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
-              <option value="json">JSON Format</option>
-              <option value="csv">CSV Format</option>
+              <option value="json">JSON Format (Complete Data)</option>
+              <option value="csv">CSV Format (Comprehensive)</option>
             </select>
           </div>
           
@@ -271,7 +300,7 @@ const DownloadModal = React.memo(({
 });
 
 const SettingsPage = ({ onStartResync }) => {
-  const { user, getAuthToken, updateUserAttributes, fetchUserAttributes } = useAuth();
+  const { user, getAuthToken } = useAuth();
   const { darkMode: currentTheme, setDarkMode } = useTheme();
   
   // Settings state
@@ -295,7 +324,15 @@ const SettingsPage = ({ onStartResync }) => {
   // Backup state
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [backupName, setBackupName] = useState('');
-  const [currentBackup, setCurrentBackup] = useState(null);
+  const [currentBackup, setCurrentBackup] = useState({
+    exists: false,
+    name: '',
+    date: '',
+    size: '',
+    status: '',
+    productCount: 0,
+    fieldCount: 0
+  });
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   
   // Download state
@@ -303,6 +340,7 @@ const SettingsPage = ({ onStartResync }) => {
   const [downloadFormat, setDownloadFormat] = useState('json');
   const [selectedDataTypes, setSelectedDataTypes] = useState(['products', 'categories']);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [operationStatus, setOperationStatus] = useState('');
 
   // Load backup status
   const loadBackupStatus = useCallback(async () => {
@@ -310,8 +348,18 @@ const SettingsPage = ({ onStartResync }) => {
       const authToken = await getAuthToken();
       const result = await getBackupStatus(authToken);
       
-      if (result.success && result.backup) {
+      if (result.success && result.backup.exists) {
         setCurrentBackup(result.backup);
+      } else {
+        setCurrentBackup({
+          exists: false,
+          name: '',
+          date: '',
+          size: '',
+          status: '',
+          productCount: 0,
+          fieldCount: 0
+        });
       }
     } catch (error) {
       console.error('Failed to load backup status:', error);
@@ -392,7 +440,6 @@ const SettingsPage = ({ onStartResync }) => {
 
       if (result.success && result.syncId) {
         console.log('✅ Resync started successfully, redirecting to progress screen');
-        // Call parent component to handle sync progress (same as initial sync)
         if (onStartResync) {
           onStartResync(result.syncId);
         }
@@ -401,35 +448,33 @@ const SettingsPage = ({ onStartResync }) => {
       }
     } catch (error) {
       console.error('❌ Resync start error:', error);
-      alert(`Error starting resync: ${error.message}`);
+      setOperationStatus(`Error starting resync: ${error.message}`);
+      setTimeout(() => setOperationStatus(''), 5000);
       setIsResyncStarting(false);
     }
   };
 
   // Backup handlers
   const handleCreateBackup = async () => {
-    if (!backupName.trim()) {
-      alert('Please enter a backup name');
-      return;
-    }
-
     setIsCreatingBackup(true);
     
     try {
       const authToken = await getAuthToken();
-      const result = await createBackup(backupName.trim(), authToken);
+      const result = await createBackup(backupName || 'Product Backup', authToken);
       
       if (result.success) {
         setCurrentBackup(result.backup);
-        setBackupName('');
         setShowBackupModal(false);
-        alert('Backup created successfully!');
+        setBackupName('');
+        setOperationStatus('Backup created successfully!');
+        setTimeout(() => setOperationStatus(''), 3000);
       } else {
-        alert(`Backup failed: ${result.error}`);
+        setOperationStatus(`Backup error: ${result.error}`);
+        setTimeout(() => setOperationStatus(''), 5000);
       }
     } catch (error) {
-      console.error('Backup error:', error);
-      alert(`Error creating backup: ${error.message}`);
+      setOperationStatus(`Backup error: ${error.message}`);
+      setTimeout(() => setOperationStatus(''), 5000);
     } finally {
       setIsCreatingBackup(false);
     }
@@ -440,51 +485,53 @@ const SettingsPage = ({ onStartResync }) => {
       const authToken = await getAuthToken();
       const result = await downloadBackup(authToken);
       
-      if (result.success && result.downloadUrl) {
+      if (result.success) {
         const link = document.createElement('a');
         link.href = result.downloadUrl;
-        link.download = result.filename || 'karoosync-backup.zip';
+        link.download = result.filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        
+        setOperationStatus('Backup download started...');
+        setTimeout(() => setOperationStatus(''), 3000);
       } else {
-        alert(`Download failed: ${result.error}`);
+        setOperationStatus(`Download error: ${result.error}`);
+        setTimeout(() => setOperationStatus(''), 5000);
       }
     } catch (error) {
-      console.error('Download error:', error);
-      alert(`Error downloading backup: ${error.message}`);
+      setOperationStatus(`Download error: ${error.message}`);
+      setTimeout(() => setOperationStatus(''), 5000);
     }
   };
 
   // Export handlers
   const handleExportData = async () => {
-    if (selectedDataTypes.length === 0) {
-      alert('Please select at least one data type to export');
-      return;
-    }
-
     setIsDownloading(true);
-    
     try {
       const authToken = await getAuthToken();
       const result = await exportData(downloadFormat, selectedDataTypes, authToken);
       
-      if (result.success && result.downloadUrl) {
+      if (result.success) {
         const link = document.createElement('a');
         link.href = result.downloadUrl;
-        link.download = result.filename || `karoosync-export.${downloadFormat}`;
+        link.download = result.filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         
+        setOperationStatus(`Data export started. Download should begin automatically.`);
+        setTimeout(() => setOperationStatus(''), 5000);
+        
         setShowDownloadModal(false);
         setSelectedDataTypes(['products', 'categories']);
       } else {
-        alert(`Export failed: ${result.error}`);
+        setOperationStatus(`Export error: ${result.error}`);
+        setTimeout(() => setOperationStatus(''), 5000);
       }
     } catch (error) {
-      console.error('Export error:', error);
-      alert(`Error exporting data: ${error.message}`);
+      setOperationStatus(`Export error: ${error.message}`);
+      setTimeout(() => setOperationStatus(''), 5000);
     } finally {
       setIsDownloading(false);
     }
@@ -499,14 +546,17 @@ const SettingsPage = ({ onStartResync }) => {
       const result = await deleteAccount(authToken);
       
       if (result.success) {
-        alert('Account deleted successfully. You will be logged out.');
-        window.location.href = '/';
+        setOperationStatus('Account deleted successfully. You will be logged out.');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
       } else {
-        alert(`Account deletion failed: ${result.error}`);
+        setOperationStatus(`Account deletion failed: ${result.error}`);
+        setTimeout(() => setOperationStatus(''), 5000);
       }
     } catch (error) {
-      console.error('Account deletion error:', error);
-      alert(`Error deleting account: ${error.message}`);
+      setOperationStatus(`Account deletion error: ${error.message}`);
+      setTimeout(() => setOperationStatus(''), 5000);
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
@@ -724,28 +774,50 @@ const SettingsPage = ({ onStartResync }) => {
               </button>
             </div>
             
-            {currentBackup && (
-              <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-600 pt-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Download Backup</label>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {currentBackup.name} - {new Date(currentBackup.createdAt).toLocaleDateString()}
-                  </p>
+            {currentBackup.exists ? (
+              <div className="border-t border-gray-200 dark:border-gray-600 pt-4">
+                <div className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-gray-700 rounded">
+                  <div className="flex items-center">
+                    <Database className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{currentBackup.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Created on {currentBackup.date} • {currentBackup.size} • {currentBackup.productCount} products • {currentBackup.fieldCount} fields
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400">
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Ready
+                    </span>
+                    <button 
+                      onClick={handleDownloadBackup}
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-xs"
+                    >
+                      Download
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={handleDownloadBackup}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </button>
+              </div>
+            ) : (
+              <div className="border-t border-gray-200 dark:border-gray-600 pt-4">
+                <div className="text-center py-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+                  <Shield className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No backup created yet</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Create your first comprehensive backup to secure your product data</p>
+                </div>
               </div>
             )}
             
             <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-600 pt-4">
               <div>
                 <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Export Data</label>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Download your data in various formats</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Download your product data and categories in JSON or comprehensive CSV format</p>
+                <div className="flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">JSON (Complete)</span>
+                  <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">CSV (38 Fields)</span>
+                </div>
               </div>
               <button
                 onClick={() => setShowDownloadModal(true)}
@@ -783,6 +855,17 @@ const SettingsPage = ({ onStartResync }) => {
             </div>
           </div>
         </div>
+
+        {/* Operation Status Messages */}
+        {operationStatus && (
+          <div className={`p-4 rounded-lg text-sm ${
+            operationStatus.includes('Error') || operationStatus.includes('error') || operationStatus.includes('failed')
+              ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-800 dark:text-red-200' 
+              : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-800 dark:text-green-200'
+          }`}>
+            {operationStatus}
+          </div>
+        )}
       </div>
     </div>
   );

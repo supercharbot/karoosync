@@ -72,133 +72,134 @@ async function deleteCognitoUser(userId) {
     }
 }
 
-// Create CSV backup of user data
+// Create CSV backup of user data - UPDATED FOR NEW ARCHITECTURE
 async function createUserBackup(userId, backupName) {
     try {
         console.log(`💾 Creating CSV backup for user: ${userId}`);
         
-        // Get all user products from all categories
-        const allProducts = [];
-        
-        const listResponse = await s3Client.send(new ListObjectsV2Command({
+        // Load products from new architecture
+        const productsResponse = await s3Client.send(new GetObjectCommand({
             Bucket: BUCKET_NAME,
-            Prefix: `users/${userId}/categories/`
+            Key: `users/${userId}/products.json.gz`
         }));
-
-        if (!listResponse.Contents || listResponse.Contents.length === 0) {
+        
+        const productsCompressed = await productsResponse.Body.transformToByteArray();
+        const productsData = JSON.parse(zlib.gunzipSync(productsCompressed).toString());
+        
+        if (!productsData.products || Object.keys(productsData.products).length === 0) {
             throw new Error('No product data found to backup');
         }
-
-        // Read all category files and collect products
-        for (const object of listResponse.Contents) {
-            if (!object.Key.endsWith('.json.gz')) continue;
+        
+        // Convert products object to array
+        const allProducts = Object.values(productsData.products);
+        
+        // Load categories for name mapping
+        let categoryMap = {};
+        try {
+            const categoriesResponse = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/categories.json.gz`
+            }));
             
-            try {
-                const response = await s3Client.send(new GetObjectCommand({
-                    Bucket: BUCKET_NAME,
-                    Key: object.Key
-                }));
-                
-                const compressedData = await response.Body.transformToByteArray();
-                const decompressedData = zlib.gunzipSync(compressedData);
-                const categoryData = JSON.parse(decompressedData.toString());
-                
-                if (categoryData.products && Array.isArray(categoryData.products)) {
-                    allProducts.push(...categoryData.products);
-                }
-            } catch (fileError) {
-                console.warn(`⚠️ Could not read category file ${object.Key}:`, fileError.message);
-            }
+            const categoriesCompressed = await categoriesResponse.Body.transformToByteArray();
+            const categoriesData = JSON.parse(zlib.gunzipSync(categoriesCompressed).toString());
+            
+            categoryMap = categoriesData.categories || {};
+        } catch (error) {
+            console.warn('⚠️ Could not load categories for backup, using IDs only');
         }
-
-        if (allProducts.length === 0) {
-            throw new Error('No products found in any category');
+        
+        // Load tags for name mapping
+        let tagMap = {};
+        try {
+            const tagsResponse = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/tags.json.gz`
+            }));
+            
+            const tagsCompressed = await tagsResponse.Body.transformToByteArray();
+            const tagsData = JSON.parse(zlib.gunzipSync(tagsCompressed).toString());
+            
+            tagMap = tagsData.tags || {};
+        } catch (error) {
+            console.warn('⚠️ Could not load tags for backup, using IDs only');
         }
-
-        // Create comprehensive CSV content (same as enhanced export)
+        
+        console.log(`📊 Found ${allProducts.length} products for backup`);
+        
+        // Generate comprehensive CSV headers
         const csvHeaders = [
-            'ID',
-            'Name',
-            'Slug',
-            'SKU',
-            'Status',
-            'Type',
-            'Featured',
-            'Virtual',
-            'Downloadable',
-            'Regular Price',
-            'Sale Price',
-            'Sale Date From',
-            'Sale Date To',
-            'Stock Status',
-            'Stock Quantity',
-            'Manage Stock',
-            'Backorders',
-            'Sold Individually',
-            'Weight',
-            'Length',
-            'Width',
-            'Height',
-            'Shipping Class',
-            'Categories',
-            'Tags',
-            'Description',
-            'Short Description',
-            'Purchase Note',
-            'Menu Order',
-            'Reviews Allowed',
-            'External URL',
-            'Button Text',
-            'Download Limit',
-            'Download Expiry',
-            'Image URLs',
-            'Gallery URLs',
-            'Attributes',
-            'Created Date',
-            'Modified Date'
+            'ID', 'Type', 'SKU', 'Name', 'Published', 'Featured', 'Visibility',
+            'Short Description', 'Description', 'Date Sale Price Starts', 'Date Sale Price Ends',
+            'Tax Status', 'Tax Class', 'In Stock', 'Stock', 'Backorders',
+            'Sold Individually', 'Weight', 'Length', 'Width', 'Height',
+            'Reviews Allowed', 'Purchase Note', 'Sale Price', 'Regular Price',
+            'Categories', 'Tags', 'Shipping Class', 'Images', 'Download Limit',
+            'Download Expiry', 'Parent', 'Grouped Products', 'Upsells', 'Cross-sells',
+            'External URL', 'Button Text', 'Position', 'Attribute 1 Name', 'Attribute 1 Value',
+            'Attribute 1 Visible', 'Attribute 1 Global', 'Meta: _virtual', 'Meta: _downloadable'
         ];
-
-        const csvRows = allProducts.map(product => [
-            product.id || '',
-            `"${(product.name || '').replace(/"/g, '""')}"`,
-            product.slug || '',
-            product.sku || '',
-            product.status || '',
-            product.type || '',
-            product.featured ? 'Yes' : 'No',
-            product.virtual ? 'Yes' : 'No',
-            product.downloadable ? 'Yes' : 'No',
-            product.regular_price || '',
-            product.sale_price || '',
-            product.date_on_sale_from || '',
-            product.date_on_sale_to || '',
-            product.stock_status || '',
-            product.stock_quantity || '',
-            product.manage_stock ? 'Yes' : 'No',
-            product.backorders || '',
-            product.sold_individually ? 'Yes' : 'No',
-            product.weight || '',
-            product.dimensions?.length || '',
-            product.dimensions?.width || '',
-            product.dimensions?.height || '',
-            product.shipping_class || '',
-            `"${product.categories?.map(cat => cat.name).join('; ') || ''}"`,
-            `"${product.tags?.map(tag => tag.name).join('; ') || ''}"`,
-            `"${(product.description || '').replace(/<[^>]*>/g, '').replace(/"/g, '""').substring(0, 1000)}"`,
-            `"${(product.short_description || '').replace(/<[^>]*>/g, '').replace(/"/g, '""').substring(0, 500)}"`,
-            `"${(product.purchase_note || '').replace(/"/g, '""')}"`,
-            product.menu_order || '',
-            product.reviews_allowed ? 'Yes' : 'No',
-            product.external_url || '',
-            product.button_text || '',
-            product.download_limit || '',
-            product.download_expiry || '',
-            `"${product.images?.map(img => img.src).join('; ') || ''}"`,
-            `"${product.images?.slice(1)?.map(img => img.src).join('; ') || ''}"`, // Gallery images (excluding first)
-            `"${product.attributes?.map(attr => `${attr.name}: ${attr.options?.join(', ')}`).join('; ') || ''}"`,
-            product.date_created || '',
-            product.date_modified || ''
-        ]);
+        
+        // Convert products to CSV rows
+        const csvRows = allProducts.map(product => {
+            // Get category names
+            const categoryNames = (product.category_ids || [])
+                .map(catId => categoryMap[catId]?.name || `Category ${catId}`)
+                .join('; ');
+            
+            // Get tag names  
+            const tagNames = (product.tag_ids || [])
+                .map(tagId => tagMap[tagId]?.name || `Tag ${tagId}`)
+                .join('; ');
+                
+            return [
+                product.id || '',
+                product.type || 'simple',
+                `"${(product.sku || '').replace(/"/g, '""')}"`,
+                `"${(product.name || '').replace(/"/g, '""')}"`,
+                product.status === 'publish' ? '1' : '0',
+                product.featured ? '1' : '0',
+                product.catalog_visibility || 'visible',
+                `"${(product.short_description || '').replace(/"/g, '""')}"`,
+                `"${(product.description || '').replace(/"/g, '""')}"`,
+                product.date_on_sale_from || '',
+                product.date_on_sale_to || '',
+                'taxable', // Default tax status
+                product.tax_class_id || '',
+                product.stock_status === 'instock' ? '1' : '0',
+                product.stock_quantity || '',
+                product.backorders || 'no',
+                product.sold_individually ? '1' : '0',
+                product.weight || '',
+                product.dimensions?.length || '',
+                product.dimensions?.width || '',
+                product.dimensions?.height || '',
+                product.reviews_allowed !== false ? '1' : '0',
+                `"${(product.purchase_note || '').replace(/"/g, '""')}"`,
+                product.sale_price || '',
+                product.regular_price || '',
+                `"${categoryNames}"`,
+                `"${tagNames}"`,
+                product.shipping_class_id || '',
+                `"${(product.images || []).map(img => img.src || '').join('; ')}"`,
+                product.download_limit || '',
+                product.download_expiry || '',
+                product.parent_id || '',
+                '', // Grouped products (not used)
+                '', // Upsells (not implemented)
+                '', // Cross-sells (not implemented)  
+                product.external_url || '',
+                product.button_text || '',
+                product.menu_order || '',
+                // First attribute
+                product.attributes?.[0]?.name || '',
+                product.attributes?.[0]?.options?.join(', ') || '',
+                product.attributes?.[0]?.visible ? '1' : '0',
+                product.attributes?.[0]?.variation ? '0' : '1',
+                product.virtual ? '1' : '0',
+                product.downloadable ? '1' : '0'
+            ];
+        });
 
         const csvContent = [csvHeaders.join(','), ...csvRows.map(row => row.join(','))].join('\n');
 
@@ -399,81 +400,64 @@ function generateCSV(products, format = 'comprehensive') {
     return [headers.join(','), ...csvRows.map(row => row.join(','))].join('\n');
 }
 
-// Enhanced export user data with comprehensive CSV
+// Enhanced export user data with comprehensive CSV - UPDATED FOR NEW ARCHITECTURE
 async function exportUserData(userId, format, dataTypes) {
     try {
         console.log(`📤 Exporting data for user: ${userId}, format: ${format}`);
         
         const exportData = {};
         
-        // Get metadata if requested
-        if (dataTypes.includes('products') || dataTypes.includes('categories')) {
+        // Get categories if requested
+        if (dataTypes.includes('categories')) {
             try {
-                const metadataResponse = await s3Client.send(new GetObjectCommand({
+                const categoriesResponse = await s3Client.send(new GetObjectCommand({
                     Bucket: BUCKET_NAME,
-                    Key: `users/${userId}/metadata.json.gz`
+                    Key: `users/${userId}/categories.json.gz`
                 }));
                 
-                const compressedMetadata = await metadataResponse.Body.transformToByteArray();
-                const metadata = JSON.parse(zlib.gunzipSync(compressedMetadata).toString());
+                const categoriesCompressed = await categoriesResponse.Body.transformToByteArray();
+                const categoriesData = JSON.parse(zlib.gunzipSync(categoriesCompressed).toString());
                 
-                if (dataTypes.includes('categories')) {
-                    exportData.categories = metadata.categories;
-                }
+                exportData.categories = Object.values(categoriesData.categories || {});
             } catch (error) {
-                console.warn('⚠️ Could not load metadata for export');
+                console.warn('⚠️ Could not load categories for export');
+                exportData.categories = [];
             }
         }
         
         // Get products if requested
         if (dataTypes.includes('products')) {
-            exportData.products = [];
-            
-            const listResponse = await s3Client.send(new ListObjectsV2Command({
-                Bucket: BUCKET_NAME,
-                Prefix: `users/${userId}/categories/`
-            }));
-            
-            if (listResponse.Contents) {
-                for (const object of listResponse.Contents) {
-                    if (!object.Key.endsWith('.json.gz')) continue;
-                    
-                    try {
-                        const response = await s3Client.send(new GetObjectCommand({
-                            Bucket: BUCKET_NAME,
-                            Key: object.Key
-                        }));
-                        
-                        const compressedData = await response.Body.transformToByteArray();
-                        const categoryData = JSON.parse(zlib.gunzipSync(compressedData).toString());
-                        
-                        exportData.products.push(...categoryData.products);
-                    } catch (fileError) {
-                        console.warn(`⚠️ Could not load category data from ${object.Key}`);
-                    }
-                }
+            try {
+                const productsResponse = await s3Client.send(new GetObjectCommand({
+                    Bucket: BUCKET_NAME,
+                    Key: `users/${userId}/products.json.gz`
+                }));
+                
+                const productsCompressed = await productsResponse.Body.transformToByteArray();
+                const productsData = JSON.parse(zlib.gunzipSync(productsCompressed).toString());
+                
+                exportData.products = Object.values(productsData.products || {});
+            } catch (error) {
+                console.warn('⚠️ Could not load products for export');
+                exportData.products = [];
             }
         }
         
-        exportData.exportedAt = new Date().toISOString();
-        exportData.format = format;
+        // Add metadata
+        exportData.exportInfo = {
+            exportedAt: new Date().toISOString(),
+            format,
+            dataTypes,
+            totalProducts: exportData.products?.length || 0,
+            totalCategories: exportData.categories?.length || 0
+        };
         
-        // Convert to requested format
-        let fileContent;
-        let contentType;
-        let filename;
+        let fileContent, contentType, filename;
         
         switch (format) {
-            case 'json':
-                fileContent = JSON.stringify(exportData, null, 2);
-                contentType = 'application/json';
-                filename = 'karoosync-export.json';
-                break;
-                
             case 'csv':
                 if (exportData.products && exportData.products.length > 0) {
                     fileContent = generateCSV(exportData.products, 'comprehensive');
-                    console.log(`📊 CSV Export: ${exportData.products.length} products with comprehensive fields`);
                 } else {
                     fileContent = 'No products to export';
                 }
