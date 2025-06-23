@@ -13,121 +13,224 @@ const CORS_HEADERS = {
 
 async function checkUserData(userId) {
     try {
-        const response = await s3Client.send(new GetObjectCommand({
+        console.log(`🔍 Checking user data for: ${userId}`);
+        
+        // Check for the main store metadata file
+        const metadataResponse = await s3Client.send(new GetObjectCommand({
             Bucket: BUCKET_NAME,
-            Key: `users/${userId}/metadata.json.gz`
+            Key: `users/${userId}/store-metadata.json.gz`
         }));
         
-        const compressed = await response.Body.transformToByteArray();
-        const metadata = JSON.parse(zlib.gunzipSync(compressed).toString());
+        const metadataCompressed = await metadataResponse.Body.transformToByteArray();
+        const storeMetadata = JSON.parse(zlib.gunzipSync(metadataCompressed).toString());
         
-        const listResponse = await s3Client.send(new ListObjectsV2Command({
-            Bucket: BUCKET_NAME,
-            Prefix: `users/${userId}/categories/`
-        }));
+        // Check for other essential files to verify complete sync
+        const essentialFiles = [
+            'products.json.gz',
+            'categories.json.gz',
+            'indexes/by-category.json.gz'
+        ];
         
-        const actualCategories = (listResponse.Contents || [])
-            .filter(obj => obj.Key.endsWith('.json.gz'))
-            .map(obj => obj.Key.split('/').slice(-2, -1)[0]);
+        const fileChecks = await Promise.allSettled(
+            essentialFiles.map(async (filename) => {
+                const response = await s3Client.send(new GetObjectCommand({
+                    Bucket: BUCKET_NAME,
+                    Key: `users/${userId}/${filename}`
+                }));
+                return filename;
+            })
+        );
         
-        const metadataCategories = metadata.categories?.map(cat => `category-${cat.id}`) || [];
-        const missing = metadataCategories.filter(cat => !actualCategories.includes(cat));
-        if (missing.length > 0) {
-            console.log(`⚠️  Metadata has categories not in S3: ${missing.join(', ')}`);
+        const missingFiles = fileChecks
+            .filter(result => result.status === 'rejected')
+            .map((_, index) => essentialFiles[index]);
+        
+        if (missingFiles.length > 0) {
+            console.log(`⚠️  Missing essential files: ${missingFiles.join(', ')}`);
+            return { 
+                success: true, 
+                hasData: false, 
+                missingFiles,
+                error: 'Incomplete sync data - missing essential files'
+            };
         }
+        
+        // Load categories for UI structure
+        const categoriesResponse = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/categories.json.gz`
+        }));
+        
+        const categoriesCompressed = await categoriesResponse.Body.transformToByteArray();
+        const categoriesData = JSON.parse(zlib.gunzipSync(categoriesCompressed).toString());
+        
+        console.log(`✅ User data found - ${storeMetadata.store_info?.total_products || 0} products across ${Object.keys(categoriesData.categories || {}).length} categories`);
         
         return {
             success: true,
             hasData: true,
-            structure: 'categorized',
-            metadata,
-            availableCategories: actualCategories
+            structure: 'unified', // New architecture identifier
+            metadata: {
+                ...storeMetadata,
+                categories: Object.values(categoriesData.categories || {}),
+                totalProducts: storeMetadata.store_info?.total_products || 0,
+                totalCategories: storeMetadata.store_info?.total_categories || 0,
+                lastSync: storeMetadata.sync_status?.last_sync,
+                architectureVersion: storeMetadata.architecture_version || '2.0'
+            }
         };
     } catch (error) {
         if (error.name === 'NoSuchKey') {
+            console.log('📭 No user data found');
             return { success: true, hasData: false };
         }
+        console.error('❌ Error checking user data:', error);
         throw error;
     }
 }
 
 async function loadCategory(userId, categoryKey) {
-    console.log(`Loading category: ${categoryKey} for user: ${userId}`);
+    console.log(`📂 Loading category: ${categoryKey} for user: ${userId}`);
     
     try {
-        const response = await s3Client.send(new GetObjectCommand({
+        // Parse category ID from categoryKey (format: "category-123" or just "123")
+        const categoryId = categoryKey.toString().replace('category-', '');
+        
+        // Load the category index to get product IDs for this category
+        const categoryIndexResponse = await s3Client.send(new GetObjectCommand({
             Bucket: BUCKET_NAME,
-            Key: `users/${userId}/categories/${categoryKey}/products.json.gz`
+            Key: `users/${userId}/indexes/by-category.json.gz`
         }));
         
-        const compressed = await response.Body.transformToByteArray();
-        const data = JSON.parse(zlib.gunzipSync(compressed).toString());
+        const categoryIndexCompressed = await categoryIndexResponse.Body.transformToByteArray();
+        const categoryIndex = JSON.parse(zlib.gunzipSync(categoryIndexCompressed).toString());
         
-        const expectedCategoryId = parseInt(categoryKey.replace('category-', ''));
+        // Get product IDs for this category
+        const productIds = categoryIndex.category_products?.[categoryId] || [];
         
-        const primaryCategoryProducts = data.products.filter(product => {
-            const productCategories = product.categories || [];
-            const primaryCategoryId = productCategories.length > 0 ? productCategories[0].id : null;
-            return primaryCategoryId === expectedCategoryId;
-        });
-
-        const metadataResponse = await s3Client.send(new GetObjectCommand({
+        if (productIds.length === 0) {
+            console.log(`📭 No products found for category: ${categoryId}`);
+            return {
+                success: true,
+                products: [],
+                category: { id: categoryId, name: `Category ${categoryId}` },
+                total: 0,
+                message: 'No products in this category'
+            };
+        }
+        
+        // Load all products
+        const productsResponse = await s3Client.send(new GetObjectCommand({
             Bucket: BUCKET_NAME,
-            Key: `users/${userId}/metadata.json.gz`
+            Key: `users/${userId}/products.json.gz`
         }));
         
-        const compressedMetadata = await metadataResponse.Body.transformToByteArray();
-        const metadata = JSON.parse(zlib.gunzipSync(compressedMetadata).toString());
+        const productsCompressed = await productsResponse.Body.transformToByteArray();
+        const productsData = JSON.parse(zlib.gunzipSync(productsCompressed).toString());
         
-        const childCategories = metadata.categories.filter(cat => 
-            cat.parent === expectedCategoryId
-        );
+        // Filter products for this category
+        const categoryProducts = productIds
+            .map(productId => productsData.products[productId])
+            .filter(product => product) // Remove any undefined products
+            .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
         
-        console.log(`📊 Category ${categoryKey}: ${data.products.length} total → ${primaryCategoryProducts.length} primary, ${childCategories.length} children`);
+        // Load category details
+        const categoriesResponse = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/categories.json.gz`
+        }));
+        
+        const categoriesCompressed = await categoriesResponse.Body.transformToByteArray();
+        const categoriesData = JSON.parse(zlib.gunzipSync(categoriesCompressed).toString());
+        
+        const categoryInfo = categoriesData.categories?.[categoryId] || {
+            id: categoryId,
+            name: `Category ${categoryId}`,
+            slug: `category-${categoryId}`
+        };
+        
+        console.log(`✅ Loaded ${categoryProducts.length} products for category: ${categoryInfo.name}`);
         
         return {
             success: true,
-            products: primaryCategoryProducts,
-            childCategories: childCategories
+            products: categoryProducts,
+            category: categoryInfo,
+            total: categoryProducts.length,
+            structure: 'unified'
         };
+        
     } catch (error) {
+        console.error(`❌ Error loading category ${categoryKey}:`, error);
         if (error.name === 'NoSuchKey') {
-            console.log(`Category ${categoryKey} not found - checking for child categories only`);
-            
-            try {
-                const metadataResponse = await s3Client.send(new GetObjectCommand({
-                    Bucket: BUCKET_NAME,
-                    Key: `users/${userId}/metadata.json.gz`
-                }));
-                
-                const compressedMetadata = await metadataResponse.Body.transformToByteArray();
-                const metadata = JSON.parse(zlib.gunzipSync(compressedMetadata).toString());
-                
-                const expectedCategoryId = parseInt(categoryKey.replace('category-', ''));
-                const childCategories = metadata.categories.filter(cat => 
-                    cat.parent === expectedCategoryId
-                );
-                
-                return {
-                    success: true,
-                    products: [],
-                    childCategories: childCategories,
-                    warning: 'Category file not found'
-                };
-            } catch (metadataError) {
-                return {
-                    success: true,
-                    products: [],
-                    childCategories: [],
-                    warning: 'Category file not found'
-                };
-            }
+            return {
+                success: false,
+                error: 'Category data not found - may need to resync'
+            };
         }
-        console.error('Category load error:', error);
         throw error;
     }
 }
 
+async function loadProductVariations(userId, productId) {
+    console.log(`🔄 Loading variations for product: ${productId}`);
+    
+    try {
+        // Load all products
+        const productsResponse = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/products.json.gz`
+        }));
+        
+        const productsCompressed = await productsResponse.Body.transformToByteArray();
+        const productsData = JSON.parse(zlib.gunzipSync(productsCompressed).toString());
+        
+        const parentProduct = productsData.products[productId];
+        
+        if (!parentProduct) {
+            return {
+                success: false,
+                error: 'Product not found'
+            };
+        }
+        
+        if (parentProduct.type !== 'variable') {
+            return {
+                success: true,
+                variations: [],
+                message: 'Product is not a variable product'
+            };
+        }
+        
+        // Get variation IDs from the parent product
+        const variationIds = parentProduct.variations || [];
+        
+        // Load variation products
+        const variations = variationIds
+            .map(variationId => productsData.products[variationId])
+            .filter(variation => variation && variation.type === 'variation');
+        
+        console.log(`✅ Loaded ${variations.length} variations for product: ${parentProduct.name}`);
+        
+        return {
+            success: true,
+            variations: variations,
+            parent: parentProduct,
+            total: variations.length
+        };
+        
+    } catch (error) {
+        console.error(`❌ Error loading variations for product ${productId}:`, error);
+        if (error.name === 'NoSuchKey') {
+            return {
+                success: false,
+                error: 'Product data not found - may need to resync'
+            };
+        }
+        throw error;
+    }
+}
+
+// Get user credentials from the new architecture
 async function getUserCredentials(userId) {
     try {
         const response = await s3Client.send(new GetObjectCommand({
@@ -147,52 +250,119 @@ async function getUserCredentials(userId) {
     }
 }
 
-async function loadProductVariations(userId, productId) {
-    console.log(`Loading variations for product ${productId}, user: ${userId}`);
+// Enhanced search function using the search index
+async function searchProducts(userId, searchTerm, options = {}) {
+    console.log(`🔍 Searching products for: "${searchTerm}"`);
     
     try {
-        const credentials = await getUserCredentials(userId);
-        if (!credentials) {
+        const { limit = 50, offset = 0, category = null, status = null, type = null } = options;
+        
+        // Load search index
+        const searchIndexResponse = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/indexes/search-index.json.gz`
+        }));
+        
+        const searchIndexCompressed = await searchIndexResponse.Body.transformToByteArray();
+        const searchIndex = JSON.parse(zlib.gunzipSync(searchIndexCompressed).toString());
+        
+        // Find matching product IDs
+        const searchTerms = searchTerm.toLowerCase().split(/\s+/);
+        const matchingProductIds = new Set();
+        
+        searchTerms.forEach(term => {
+            const productIds = searchIndex.search_terms?.[term] || [];
+            productIds.forEach(id => matchingProductIds.add(id));
+        });
+        
+        if (matchingProductIds.size === 0) {
             return {
-                success: false,
-                error: 'User credentials not found. Please reconnect your store.'
+                success: true,
+                products: [],
+                total: 0,
+                message: 'No products found matching search criteria'
             };
         }
-
-        const wooCommerceUrl = `${credentials.url}/wp-json/wc/v3/products/${productId}/variations`;
         
-        const response = await fetch(wooCommerceUrl, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Basic ${Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64')}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`WooCommerce API error: ${response.status} - ${errorText}`);
+        // Load products and filter
+        const productsResponse = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/products.json.gz`
+        }));
+        
+        const productsCompressed = await productsResponse.Body.transformToByteArray();
+        const productsData = JSON.parse(zlib.gunzipSync(productsCompressed).toString());
+        
+        let filteredProducts = Array.from(matchingProductIds)
+            .map(productId => productsData.products[productId])
+            .filter(product => product);
+        
+        // Apply additional filters
+        if (category) {
+            filteredProducts = filteredProducts.filter(product => 
+                product.category_ids?.includes(parseInt(category))
+            );
         }
-
-        const variations = await response.json();
         
-        console.log(`✅ Loaded ${variations.length} variations for product ${productId}`);
+        if (status) {
+            filteredProducts = filteredProducts.filter(product => 
+                product.status === status
+            );
+        }
+        
+        if (type) {
+            filteredProducts = filteredProducts.filter(product => 
+                product.type === type
+            );
+        }
+        
+        // Sort by relevance (name matches first, then others)
+        filteredProducts.sort((a, b) => {
+            const aNameMatch = a.name.toLowerCase().includes(searchTerm.toLowerCase());
+            const bNameMatch = b.name.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            if (aNameMatch && !bNameMatch) return -1;
+            if (!aNameMatch && bNameMatch) return 1;
+            
+            return a.name.localeCompare(b.name);
+        });
+        
+        // Apply pagination
+        const total = filteredProducts.length;
+        const paginatedProducts = filteredProducts.slice(offset, offset + limit);
+        
+        console.log(`✅ Found ${total} products matching "${searchTerm}"`);
         
         return {
             success: true,
-            variations: variations
+            products: paginatedProducts,
+            total: total,
+            offset: offset,
+            limit: limit,
+            hasMore: offset + limit < total
         };
         
     } catch (error) {
-        console.error('Variation load error:', error);
-        return {
-            success: false,
-            error: error.message
-        };
+        console.error(`❌ Error searching products:`, error);
+        if (error.name === 'NoSuchKey') {
+            return {
+                success: false,
+                error: 'Search index not found - may need to resync'
+            };
+        }
+        throw error;
     }
 }
 
 export async function handleData(event, userId) {
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 200,
+            headers: CORS_HEADERS,
+            body: ''
+        };
+    }
+
     if (event.httpMethod === 'GET') {
         const action = event.queryStringParameters?.action;
         console.log(`📍 Processing GET action: ${action}`);
@@ -241,6 +411,32 @@ export async function handleData(event, userId) {
             }
             
             const result = await loadProductVariations(userId, productId);
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify(result)
+            };
+        }
+
+        if (action === 'search') {
+            const searchTerm = event.queryStringParameters?.q;
+            if (!searchTerm) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'Search term required' })
+                };
+            }
+            
+            const options = {
+                limit: parseInt(event.queryStringParameters?.limit) || 50,
+                offset: parseInt(event.queryStringParameters?.offset) || 0,
+                category: event.queryStringParameters?.category,
+                status: event.queryStringParameters?.status,
+                type: event.queryStringParameters?.type
+            };
+            
+            const result = await searchProducts(userId, searchTerm, options);
             return {
                 statusCode: 200,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
