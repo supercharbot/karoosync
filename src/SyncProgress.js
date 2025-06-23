@@ -55,11 +55,9 @@ const SyncProgress = ({ syncId, onComplete, onError }) => {
               intervalRef.current = null;
             }
             
-            // Call onComplete after a short delay to show completion state
-            setTimeout(() => {
-              console.log('🎉 Calling onComplete callback');
-              onComplete(result.result);
-            }, 1000);
+            // Go straight to dashboard without showing completion screen
+            console.log('🎉 Calling onComplete callback - going to dashboard');
+            onComplete(result.result);
             
           } else if (result.status === 'failed') {
             console.log('❌ Sync failed, stopping polling');

@@ -7,7 +7,7 @@ import ProductEditor from './ProductEditor';
 import SettingsPage from './SettingsPage';
 import ProfilePage from './ProfilePage';
 
-const MainLayout = ({ userData, onReset }) => {
+const MainLayout = ({ userData, onReset, onStartResync }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -178,7 +178,7 @@ const MainLayout = ({ userData, onReset }) => {
           <Routes>
             <Route path="/" element={<Dashboard userData={userData} />} />
             <Route path="/products" element={<ProductEditor userData={userData} />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings" element={<SettingsPage onStartResync={onStartResync} />} />
             <Route path="/profile" element={<ProfilePage user={user} />} />
           </Routes>
         </div>

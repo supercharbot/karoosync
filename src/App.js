@@ -254,6 +254,11 @@ const App = () => {
         <MainLayout 
           userData={userData}
           onReset={handleReset}
+          onStartResync={(syncId) => {
+            console.log('🔄 Resync started from settings, showing progress screen');
+            setSyncId(syncId);
+            setCurrentView('syncing');
+          }}
         />
       )}
 
