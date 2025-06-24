@@ -173,43 +173,139 @@ async function updateSyncStatus(userId, syncId, statusUpdate) {
 
 // Fetch all products with comprehensive pagination
 async function fetchAllProducts(baseUrl, auth, onProgress = null) {
-    console.log('🔄 Fetching all products...');
+    console.log('🛒 Starting comprehensive product fetch...');
     const allProducts = [];
     let page = 1;
+    let hasLoggedStructure = false;
     
-    while (page <= 200) { // Increased limit for comprehensive sync
+    while (page <= 500) { // Increased limit
         console.log(`📄 Fetching products page ${page}...`);
         
         try {
+            // Try multiple API approaches for categories
             const products = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {
                 page,
-                per_page: 20,
-                status: 'any'
+                per_page: 100, // Increased from 20
+                status: 'any',
+                _embed: true,
+                context: 'edit' // Request full edit context for more data
             });
             
             if (!products || products.length === 0) break;
             
-            allProducts.push(...products);
-            console.log(`✅ Loaded ${products.length} products (total: ${allProducts.length})`);
-            
-            // Report progress if callback provided
-            if (onProgress) {
-                onProgress(Math.min(page / 50, 0.6)); // Products = 60% of total progress
+            // DEBUG: Log structure once
+            if (!hasLoggedStructure && products[0]) {
+                console.log('🔍 Raw WordPress product structure:', JSON.stringify(products[0], null, 2));
+                hasLoggedStructure = true;
+                
+                // Log available fields
+                const fields = Object.keys(products[0]);
+                console.log('🔍 Available product fields:', fields);
+                
+                // Check for category-related fields
+                const categoryFields = fields.filter(field => 
+                    field.toLowerCase().includes('cat') || 
+                    field.toLowerCase().includes('term') ||
+                    field.toLowerCase().includes('tax')
+                );
+                console.log('🔍 Category-related fields found:', categoryFields);
             }
             
-            if (products.length < 20) break; // Last page
+            // Enhanced category extraction for each product
+            const enhancedProducts = products.map(product => {
+                let extractedCategories = [];
+                
+                // Method 1: Standard categories field
+                if (product.categories && Array.isArray(product.categories)) {
+                    extractedCategories = product.categories;
+                    console.log(`📂 Product ${product.id} - Standard categories:`, extractedCategories);
+                }
+                
+                // Method 2: Check _embedded data
+                else if (product._embedded && product._embedded['wp:term']) {
+                    const terms = product._embedded['wp:term'].flat();
+                    extractedCategories = terms.filter(term => term.taxonomy === 'product_cat');
+                    console.log(`📂 Product ${product.id} - Embedded categories:`, extractedCategories);
+                }
+                
+                // Method 3: Check _links for category relations
+                else if (product._links && product._links['wp:term']) {
+                    console.log(`📂 Product ${product.id} - Found category links, may need separate fetch`);
+                }
+                
+                // Method 4: Check for custom category fields
+                const customCatFields = ['product_cat', 'product_category', 'categories_ids'];
+                for (const field of customCatFields) {
+                    if (product[field]) {
+                        console.log(`📂 Product ${product.id} - Found custom category field '${field}':`, product[field]);
+                        break;
+                    }
+                }
+                
+                return {
+                    ...product,
+                    _debug_categories: extractedCategories // Keep for debugging
+                };
+            });
+            
+            allProducts.push(...enhancedProducts);
+            console.log(`✅ Page ${page}: Loaded ${products.length} products (total: ${allProducts.length})`);
+            
+            // Progress reporting
+            if (onProgress) {
+                onProgress(Math.min(page / 100, 0.6)); // Products = 60% of total progress
+            }
+            
+            // Stop if we got fewer products than requested (last page)
+            if (products.length < 100) break;
             page++;
             
             // Rate limiting
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 150));
             
         } catch (error) {
             console.error(`❌ Failed to fetch products page ${page}:`, error.message);
+            
+            // Try alternative endpoint if main fails
+            if (page === 1) {
+                console.log('🔄 Trying alternative products endpoint...');
+                try {
+                    const altProducts = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {
+                        page: 1,
+                        per_page: 10,
+                        status: 'publish' // Try just published products
+                    });
+                    
+                    if (altProducts && altProducts.length > 0) {
+                        console.log('🔍 Alternative endpoint product structure:', JSON.stringify(altProducts[0], null, 2));
+                    }
+                } catch (altError) {
+                    console.error('❌ Alternative endpoint also failed:', altError.message);
+                }
+            }
+            
             break;
         }
     }
     
     console.log(`🎉 Total products fetched: ${allProducts.length}`);
+    
+    // Final category analysis
+    const productsWithCategories = allProducts.filter(p => 
+        (p.categories && p.categories.length > 0) || 
+        (p._debug_categories && p._debug_categories.length > 0)
+    );
+    
+    console.log(`📊 Products with categories: ${productsWithCategories.length}/${allProducts.length}`);
+    
+    if (productsWithCategories.length === 0) {
+        console.warn('⚠️ NO PRODUCTS HAVE CATEGORIES - This suggests:');
+        console.warn('   1. WooCommerce API permissions issue');
+        console.warn('   2. Products genuinely have no categories assigned');
+        console.warn('   3. Categories stored in non-standard field');
+        console.warn('   4. Plugin/theme modifying API response');
+    }
+    
     return allProducts;
 }
 
@@ -537,8 +633,13 @@ function normalizeWooCommerceData(rawData) {
 
 // Normalize individual product data
 function normalizeProduct(product) {
-    // Extract category IDs
-    const categoryIds = (product.categories || []).map(cat => cat.id);
+    // Extract category IDs from objects
+    const categoryIds = (product.categories || []).map(cat => {
+        console.log(`🔍 Product ${product.id} processing category:`, cat, 'extracted ID:', cat.id);
+        return cat.id;
+    }).filter(id => id);
+
+    console.log(`✅ Product ${product.id} final category_ids:`, categoryIds);
     
     // Extract tag IDs  
     const tagIds = (product.tags || []).map(tag => tag.id);
