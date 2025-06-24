@@ -1,15 +1,149 @@
 import zlib from 'zlib';
-import { S3Client, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 
 const s3Client = new S3Client({ region: 'ap-southeast-2' });
 const BUCKET_NAME = 'karoosync';
 
 const CORS_HEADERS = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': '*',
     'Access-Control-Max-Age': '86400'
 };
+
+export async function handleData(event, userId) {
+    console.log('📊 Data handler started');
+    console.log('📊 Action:', event.queryStringParameters?.action);
+    console.log('📊 Method:', event.httpMethod);
+    
+    try {
+        if (event.httpMethod === 'GET') {
+            const action = event.queryStringParameters?.action;
+            
+            if (action === 'check-data') {
+                const result = await checkUserData(userId);
+                
+                if (event.queryStringParameters?.include_credentials === 'true') {
+                    const credentials = await getUserCredentials(userId);
+                    result.credentials = credentials;
+                }
+                
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
+            
+            if (action === 'load-categories') {
+                const result = await loadCategories(userId);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
+            
+            if (action === 'load-category') {
+                const categoryKey = event.queryStringParameters?.category;
+                if (!categoryKey) {
+                    return {
+                        statusCode: 400,
+                        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ success: false, error: 'Category required' })
+                    };
+                }
+                
+                const result = await loadCategoryProducts(userId, categoryKey);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
+            
+            if (action === 'load-product') {
+                const productId = event.queryStringParameters?.productId;
+                if (!productId) {
+                    return {
+                        statusCode: 400,
+                        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ success: false, error: 'Product ID required' })
+                    };
+                }
+                
+                const result = await loadProduct(userId, productId);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
+
+            if (action === 'load-variations') {
+                const productId = event.queryStringParameters?.productId;
+                if (!productId) {
+                    return {
+                        statusCode: 400,
+                        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ success: false, error: 'Product ID required' })
+                    };
+                }
+                
+                const result = await loadProductVariations(userId, productId);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
+
+            if (action === 'search') {
+                const searchTerm = event.queryStringParameters?.q;
+                if (!searchTerm) {
+                    return {
+                        statusCode: 400,
+                        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ success: false, error: 'Search term required' })
+                    };
+                }
+                
+                const options = {
+                    limit: parseInt(event.queryStringParameters?.limit) || 50,
+                    offset: parseInt(event.queryStringParameters?.offset) || 0,
+                    category: event.queryStringParameters?.category,
+                    status: event.queryStringParameters?.status,
+                    type: event.queryStringParameters?.type
+                };
+                
+                const result = await searchProducts(userId, searchTerm, options);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
+        }
+        
+        return {
+            statusCode: 405,
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ success: false, error: 'Method not allowed' })
+        };
+        
+    } catch (error) {
+        console.error('❌ Data handler error:', error);
+        return {
+            statusCode: 500,
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ success: false, error: error.message })
+        };
+    }
+}
+
+// ===============================
+// CORE DATA FUNCTIONS
+// ===============================
 
 async function checkUserData(userId) {
     try {
@@ -33,7 +167,7 @@ async function checkUserData(userId) {
         
         const fileChecks = await Promise.allSettled(
             essentialFiles.map(async (filename) => {
-                const response = await s3Client.send(new GetObjectCommand({
+                await s3Client.send(new GetObjectCommand({
                     Bucket: BUCKET_NAME,
                     Key: `users/${userId}/${filename}`
                 }));
@@ -56,20 +190,28 @@ async function checkUserData(userId) {
         }
         
         // Load categories for UI structure
-        const categoriesResponse = await s3Client.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: `users/${userId}/categories.json.gz`
-        }));
+        const categoriesData = await loadCategoriesData(userId);
         
-        const categoriesCompressed = await categoriesResponse.Body.transformToByteArray();
-        const categoriesData = JSON.parse(zlib.gunzipSync(categoriesCompressed).toString());
+        // Build availableCategories array (ADD THIS SECTION)
+        const categoryIndex = await loadCategoryIndex(userId);
+        const availableCategories = [];
+        
+        // Add category keys for each category that has products
+        Object.keys(categoryIndex.category_products || {}).forEach(categoryId => {
+            if (categoryId === 'uncategorized') {
+                availableCategories.push('uncategorized');
+            } else {
+                availableCategories.push(`category-${categoryId}`);
+            }
+        });
         
         console.log(`✅ User data found - ${storeMetadata.store_info?.total_products || 0} products across ${Object.keys(categoriesData.categories || {}).length} categories`);
         
         return {
             success: true,
             hasData: true,
-            structure: 'unified', // New architecture identifier
+            structure: 'unified',
+            availableCategories: availableCategories,  // ADD THIS LINE
             metadata: {
                 ...storeMetadata,
                 categories: Object.values(categoriesData.categories || {}),
@@ -89,44 +231,57 @@ async function checkUserData(userId) {
     }
 }
 
-async function loadCategory(userId, categoryKey) {
-    console.log(`📂 Loading category: ${categoryKey} for user: ${userId}`);
-    
+async function loadCategories(userId) {
     try {
-        // Parse category ID from categoryKey (format: "category-123" or just "123")
-        const categoryId = categoryKey.toString().replace('category-', '');
+        console.log(`📂 Loading categories for user: ${userId}`);
         
-        // Load the category index to get product IDs for this category
-        const categoryIndexResponse = await s3Client.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: `users/${userId}/indexes/by-category.json.gz`
+        const categoriesData = await loadCategoriesData(userId);
+        const categories = Object.values(categoriesData.categories || {});
+        
+        // Add product counts from category index
+        const categoryIndex = await loadCategoryIndex(userId);
+        const categoriesWithCounts = categories.map(category => ({
+            ...category,
+            productCount: categoryIndex.category_products?.[category.id]?.length || 0
         }));
         
-        const categoryIndexCompressed = await categoryIndexResponse.Body.transformToByteArray();
-        const categoryIndex = JSON.parse(zlib.gunzipSync(categoryIndexCompressed).toString());
+        // Check for uncategorized products
+        const hasUncategorized = categoryIndex.category_products?.['uncategorized']?.length > 0 || false;
         
-        // Get product IDs for this category
-        const productIds = categoryIndex.category_products?.[categoryId] || [];
+        console.log(`✅ Loaded ${categories.length} categories`);
         
-        if (productIds.length === 0) {
-            console.log(`📭 No products found for category: ${categoryId}`);
+        return {
+            success: true,
+            categories: categoriesWithCounts,
+            hasUncategorized,
+            total: categories.length
+        };
+        
+    } catch (error) {
+        console.error('❌ Error loading categories:', error);
+        if (error.name === 'NoSuchKey') {
             return {
-                success: true,
-                products: [],
-                category: { id: categoryId, name: `Category ${categoryId}` },
-                total: 0,
-                message: 'No products in this category'
+                success: false,
+                error: 'Categories data not found - may need to resync'
             };
         }
+        throw error;
+    }
+}
+
+async function loadCategoryProducts(userId, categoryKey) {
+    try {
+        console.log(`📂 Loading products for category: ${categoryKey} for user: ${userId}`);
+        
+        // Parse category ID from categoryKey (format: "category-123", "123", or "uncategorized")
+        const categoryId = categoryKey === 'uncategorized' ? 'uncategorized' : categoryKey.toString().replace('category-', '');
+        
+        // Load the category index to get product IDs for this category
+        const categoryIndex = await loadCategoryIndex(userId);
+        const productIds = categoryIndex.category_products?.[categoryId] || [];
         
         // Load all products
-        const productsResponse = await s3Client.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: `users/${userId}/products.json.gz`
-        }));
-        
-        const productsCompressed = await productsResponse.Body.transformToByteArray();
-        const productsData = JSON.parse(zlib.gunzipSync(productsCompressed).toString());
+        const productsData = await loadProductsData(userId);
         
         // Filter products for this category
         const categoryProducts = productIds
@@ -134,26 +289,29 @@ async function loadCategory(userId, categoryKey) {
             .filter(product => product) // Remove any undefined products
             .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
         
-        // Load category details
-        const categoriesResponse = await s3Client.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: `users/${userId}/categories.json.gz`
-        }));
+        // Get child categories (NEW ADDITION)
+        let childCategories = [];
+        if (categoryId !== 'uncategorized') {
+            const categoriesData = await loadCategoriesData(userId);
+            const allCategories = Object.values(categoriesData.categories || {});
+            
+            childCategories = allCategories
+                .filter(cat => cat.parent_id.toString() === categoryId)
+                .map(child => ({
+                    ...child,
+                    productCount: categoryIndex.category_products?.[child.id]?.length || 0
+                }));
+        }
         
-        const categoriesCompressed = await categoriesResponse.Body.transformToByteArray();
-        const categoriesData = JSON.parse(zlib.gunzipSync(categoriesCompressed).toString());
+        // Get category info
+        const categoryInfo = await getCategoryInfo(userId, categoryId);
         
-        const categoryInfo = categoriesData.categories?.[categoryId] || {
-            id: categoryId,
-            name: `Category ${categoryId}`,
-            slug: `category-${categoryId}`
-        };
-        
-        console.log(`✅ Loaded ${categoryProducts.length} products for category: ${categoryInfo.name}`);
+        console.log(`✅ Loaded ${categoryProducts.length} products and ${childCategories.length} child categories for category: ${categoryInfo.name}`);
         
         return {
             success: true,
             products: categoryProducts,
+            childCategories: childCategories,  // ADD THIS LINE
             category: categoryInfo,
             total: categoryProducts.length,
             structure: 'unified'
@@ -171,19 +329,46 @@ async function loadCategory(userId, categoryKey) {
     }
 }
 
-async function loadProductVariations(userId, productId) {
-    console.log(`🔄 Loading variations for product: ${productId}`);
-    
+async function loadProduct(userId, productId) {
     try {
+        console.log(`📦 Loading product: ${productId} for user: ${userId}`);
+        
         // Load all products
-        const productsResponse = await s3Client.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: `users/${userId}/products.json.gz`
-        }));
+        const productsData = await loadProductsData(userId);
+        const product = productsData.products[productId];
         
-        const productsCompressed = await productsResponse.Body.transformToByteArray();
-        const productsData = JSON.parse(zlib.gunzipSync(productsCompressed).toString());
+        if (!product) {
+            return {
+                success: false,
+                error: 'Product not found'
+            };
+        }
         
+        console.log(`✅ Loaded product: ${product.name}`);
+        
+        return {
+            success: true,
+            product: product
+        };
+        
+    } catch (error) {
+        console.error(`❌ Error loading product ${productId}:`, error);
+        if (error.name === 'NoSuchKey') {
+            return {
+                success: false,
+                error: 'Product data not found - may need to resync'
+            };
+        }
+        throw error;
+    }
+}
+
+async function loadProductVariations(userId, productId) {
+    try {
+        console.log(`🔄 Loading variations for product: ${productId}`);
+        
+        // Load all products
+        const productsData = await loadProductsData(userId);
         const parentProduct = productsData.products[productId];
         
         if (!parentProduct) {
@@ -197,6 +382,7 @@ async function loadProductVariations(userId, productId) {
             return {
                 success: true,
                 variations: [],
+                parent: parentProduct,
                 message: 'Product is not a variable product'
             };
         }
@@ -230,49 +416,24 @@ async function loadProductVariations(userId, productId) {
     }
 }
 
-// Get user credentials from the new architecture
-async function getUserCredentials(userId) {
-    try {
-        const response = await s3Client.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: `users/${userId}/credentials.json.gz`
-        }));
-        
-        const compressed = await response.Body.transformToByteArray();
-        const credentials = JSON.parse(zlib.gunzipSync(compressed).toString());
-        
-        return credentials;
-    } catch (error) {
-        if (error.name === 'NoSuchKey') {
-            return null;
-        }
-        throw error;
-    }
-}
-
-// Enhanced search function using the search index
 async function searchProducts(userId, searchTerm, options = {}) {
-    console.log(`🔍 Searching products for: "${searchTerm}"`);
-    
     try {
-        const { limit = 50, offset = 0, category = null, status = null, type = null } = options;
+        console.log(`🔍 Searching products for: "${searchTerm}" for user: ${userId}`);
+        
+        const { limit = 50, offset = 0, category, status, type } = options;
         
         // Load search index
-        const searchIndexResponse = await s3Client.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: `users/${userId}/indexes/search-index.json.gz`
-        }));
-        
-        const searchIndexCompressed = await searchIndexResponse.Body.transformToByteArray();
-        const searchIndex = JSON.parse(zlib.gunzipSync(searchIndexCompressed).toString());
-        
-        // Find matching product IDs
+        const searchIndex = await loadSearchIndex(userId);
         const searchTerms = searchTerm.toLowerCase().split(/\s+/);
+        
+        // Find product IDs that match search terms
         const matchingProductIds = new Set();
         
         searchTerms.forEach(term => {
-            const productIds = searchIndex.search_terms?.[term] || [];
-            productIds.forEach(id => matchingProductIds.add(id));
+            if (term.length > 2) {
+                const productIds = searchIndex.search_terms?.[term] || [];
+                productIds.forEach(id => matchingProductIds.add(id));
+            }
         });
         
         if (matchingProductIds.size === 0) {
@@ -280,56 +441,41 @@ async function searchProducts(userId, searchTerm, options = {}) {
                 success: true,
                 products: [],
                 total: 0,
+                query: searchTerm,
                 message: 'No products found matching search criteria'
             };
         }
         
         // Load products and filter
-        const productsResponse = await s3Client.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: `users/${userId}/products.json.gz`
-        }));
-        
-        const productsCompressed = await productsResponse.Body.transformToByteArray();
-        const productsData = JSON.parse(zlib.gunzipSync(productsCompressed).toString());
-        
-        let filteredProducts = Array.from(matchingProductIds)
-            .map(productId => productsData.products[productId])
+        const productsData = await loadProductsData(userId);
+        let products = Array.from(matchingProductIds)
+            .map(id => productsData.products[id])
             .filter(product => product);
         
-        // Apply additional filters
+        // Apply filters
         if (category) {
-            filteredProducts = filteredProducts.filter(product => 
-                product.category_ids?.includes(parseInt(category))
+            products = products.filter(product => 
+                product.categories?.some(cat => cat.id.toString() === category.toString())
             );
         }
         
         if (status) {
-            filteredProducts = filteredProducts.filter(product => 
-                product.status === status
-            );
+            products = products.filter(product => product.status === status);
         }
         
         if (type) {
-            filteredProducts = filteredProducts.filter(product => 
-                product.type === type
-            );
+            products = products.filter(product => product.type === type);
         }
         
-        // Sort by relevance (name matches first, then others)
-        filteredProducts.sort((a, b) => {
-            const aNameMatch = a.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const bNameMatch = b.name.toLowerCase().includes(searchTerm.toLowerCase());
-            
-            if (aNameMatch && !bNameMatch) return -1;
-            if (!aNameMatch && bNameMatch) return 1;
-            
-            return a.name.localeCompare(b.name);
+        // Sort by relevance (simple name match score)
+        products.sort((a, b) => {
+            const aScore = a.name.toLowerCase().includes(searchTerm.toLowerCase()) ? 2 : 1;
+            const bScore = b.name.toLowerCase().includes(searchTerm.toLowerCase()) ? 2 : 1;
+            return bScore - aScore;
         });
         
-        // Apply pagination
-        const total = filteredProducts.length;
-        const paginatedProducts = filteredProducts.slice(offset, offset + limit);
+        const total = products.length;
+        const paginatedProducts = products.slice(offset, offset + limit);
         
         console.log(`✅ Found ${total} products matching "${searchTerm}"`);
         
@@ -337,13 +483,13 @@ async function searchProducts(userId, searchTerm, options = {}) {
             success: true,
             products: paginatedProducts,
             total: total,
-            offset: offset,
+            query: searchTerm,
             limit: limit,
-            hasMore: offset + limit < total
+            offset: offset
         };
         
     } catch (error) {
-        console.error(`❌ Error searching products:`, error);
+        console.error(`❌ Error searching products for "${searchTerm}":`, error);
         if (error.name === 'NoSuchKey') {
             return {
                 success: false,
@@ -354,100 +500,88 @@ async function searchProducts(userId, searchTerm, options = {}) {
     }
 }
 
-export async function handleData(event, userId) {
-    if (event.httpMethod === 'OPTIONS') {
+// ===============================
+// HELPER FUNCTIONS
+// ===============================
+
+async function loadCategoriesData(userId) {
+    const response = await s3Client.send(new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: `users/${userId}/categories.json.gz`
+    }));
+    
+    const compressed = await response.Body.transformToByteArray();
+    return JSON.parse(zlib.gunzipSync(compressed).toString());
+}
+
+async function loadProductsData(userId) {
+    const response = await s3Client.send(new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: `users/${userId}/products.json.gz`
+    }));
+    
+    const compressed = await response.Body.transformToByteArray();
+    return JSON.parse(zlib.gunzipSync(compressed).toString());
+}
+
+async function loadCategoryIndex(userId) {
+    const response = await s3Client.send(new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: `users/${userId}/indexes/by-category.json.gz`
+    }));
+    
+    const compressed = await response.Body.transformToByteArray();
+    return JSON.parse(zlib.gunzipSync(compressed).toString());
+}
+
+async function loadSearchIndex(userId) {
+    const response = await s3Client.send(new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: `users/${userId}/indexes/search-index.json.gz`
+    }));
+    
+    const compressed = await response.Body.transformToByteArray();
+    return JSON.parse(zlib.gunzipSync(compressed).toString());
+}
+
+async function getCategoryInfo(userId, categoryId) {
+    if (categoryId === 'uncategorized') {
         return {
-            statusCode: 200,
-            headers: CORS_HEADERS,
-            body: ''
+            id: 'uncategorized',
+            name: 'Uncategorized',
+            slug: 'uncategorized',
+            parent: 0
         };
     }
-
-    if (event.httpMethod === 'GET') {
-        const action = event.queryStringParameters?.action;
-        console.log(`📍 Processing GET action: ${action}`);
-        
-        if (action === 'check-data') {
-            const result = await checkUserData(userId);
-            
-            if (event.queryStringParameters?.include_credentials === 'true') {
-                const credentials = await getUserCredentials(userId);
-                result.credentials = credentials;
-            }
-            
-            return {
-                statusCode: 200,
-                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify(result)
-            };
-        }
-        
-        if (action === 'load-category') {
-            const categoryKey = event.queryStringParameters?.category;
-            if (!categoryKey) {
-                return {
-                    statusCode: 400,
-                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ success: false, error: 'Category required' })
-                };
-            }
-            
-            const result = await loadCategory(userId, categoryKey);
-            return {
-                statusCode: 200,
-                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify(result)
-            };
-        }
-
-        if (action === 'load-variations') {
-            const productId = event.queryStringParameters?.productId;
-            if (!productId) {
-                return {
-                    statusCode: 400,
-                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ success: false, error: 'Product ID required' })
-                };
-            }
-            
-            const result = await loadProductVariations(userId, productId);
-            return {
-                statusCode: 200,
-                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify(result)
-            };
-        }
-
-        if (action === 'search') {
-            const searchTerm = event.queryStringParameters?.q;
-            if (!searchTerm) {
-                return {
-                    statusCode: 400,
-                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ success: false, error: 'Search term required' })
-                };
-            }
-            
-            const options = {
-                limit: parseInt(event.queryStringParameters?.limit) || 50,
-                offset: parseInt(event.queryStringParameters?.offset) || 0,
-                category: event.queryStringParameters?.category,
-                status: event.queryStringParameters?.status,
-                type: event.queryStringParameters?.type
-            };
-            
-            const result = await searchProducts(userId, searchTerm, options);
-            return {
-                statusCode: 200,
-                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify(result)
-            };
-        }
-    }
     
-    return {
-        statusCode: 405,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: false, error: 'Method not allowed' })
-    };
+    try {
+        const categoriesData = await loadCategoriesData(userId);
+        return categoriesData.categories?.[categoryId] || {
+            id: categoryId,
+            name: `Category ${categoryId}`,
+            slug: `category-${categoryId}`,
+            parent: 0
+        };
+    } catch (error) {
+        return {
+            id: categoryId,
+            name: `Category ${categoryId}`,
+            slug: `category-${categoryId}`,
+            parent: 0
+        };
+    }
+}
+
+async function getUserCredentials(userId) {
+    try {
+        const response = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/credentials.json.gz`
+        }));
+        
+        const compressed = await response.Body.transformToByteArray();
+        return JSON.parse(zlib.gunzipSync(compressed).toString());
+    } catch (error) {
+        throw new Error(`Failed to get user credentials: ${error.message}`);
+    }
 }
