@@ -280,6 +280,39 @@ export async function exportData(format, dataTypes, authToken) {
 }
 
 // ============================================
+// STORE SETTINGS FUNCTIONS
+// ============================================
+
+export async function loadStoreData(type, authToken) {
+  return await makeRequest(`${API_ENDPOINT}?action=load-${type}`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+}
+
+export async function createStoreItem(type, itemData, authToken) {
+  return await makeRequest(`${API_ENDPOINT}?action=create-${type}`, {
+    method: 'POST',
+    body: JSON.stringify(itemData),
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+}
+
+export async function updateStoreItem(type, itemId, itemData, authToken) {
+  return await makeRequest(`${API_ENDPOINT}?action=update-${type}&id=${itemId}`, {
+    method: 'PUT',
+    body: JSON.stringify(itemData),
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+}
+
+export async function deleteStoreItem(type, itemId, authToken) {
+  return await makeRequest(`${API_ENDPOINT}?action=delete-${type}&id=${itemId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+}
+
+// ============================================
 // SUBSCRIPTION MANAGEMENT FUNCTIONS (if you use Stripe)
 // ============================================
 

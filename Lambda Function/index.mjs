@@ -1,6 +1,7 @@
 import { handleSync } from './handlers/syncHandler.mjs';
 import { handleProduct } from './handlers/productHandler.mjs';
 import { handleData } from './handlers/dataHandler.mjs';
+import { handleStore } from './handlers/storeHandler.mjs';
 import { handleAccount } from './handlers/accountHandler.mjs';
 import { handleStripe } from './handlers/stripeHandler.mjs';
 
@@ -114,6 +115,19 @@ export const handler = async (event) => {
         if (action === 'check-data' || action === 'load-category' || action === 'load-categories' || action === 'load-product' || action === 'load-variations' || action === 'search') {
             console.log('📊 Routing to Data handler');
             return await handleData(event, userId);
+        }
+        
+        // Store settings operations
+        if (action === 'load-attributes' || action === 'load-shipping-classes' || 
+            action === 'load-tags' || action === 'load-tax-classes' ||
+            action === 'create-attribute' || action === 'create-shipping-class' ||
+            action === 'create-tag' || action === 'create-tax-class' ||
+            action === 'update-attribute' || action === 'update-shipping-class' ||
+            action === 'update-tag' || action === 'update-tax-class' ||
+            action === 'delete-attribute' || action === 'delete-shipping-class' ||
+            action === 'delete-tag' || action === 'delete-tax-class') {
+            console.log('🏪 Routing to Store handler');
+            return await handleStore(event, userId);
         }
         
         // Health check - default GET without action

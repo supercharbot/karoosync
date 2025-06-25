@@ -530,8 +530,12 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
 };
 
 // Product Card Component
+
 const ProductCard = ({ product, onProductSelect, viewMode }) => {
+  console.log('Product data:', product); // Add this line
+  
   if (viewMode === 'list') {
+    // rest of code...
     return (
       <div
         onClick={() => onProductSelect(product)}
@@ -564,7 +568,7 @@ const ProductCard = ({ product, onProductSelect, viewMode }) => {
             </p>
           )}
           <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-            ${product.regular_price || product.price || '0.00'}
+            {product.type === 'variable' ? 'Variable Product' : `$${product.regular_price || product.price || '0.00'}`}
           </p>
         </div>
       </div>
@@ -603,7 +607,7 @@ const ProductCard = ({ product, onProductSelect, viewMode }) => {
           </p>
         )}
         <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-          ${product.regular_price || product.price || '0.00'}
+          {product.type === 'variable' ? 'Variable Product' : `$${product.regular_price || product.price || '0.00'}`}
         </p>
       </div>
     </div>

@@ -429,13 +429,8 @@ async function loadProductVariations(userId, productId) {
             };
         }
         
-        // Get variation IDs from the parent product
-        const variationIds = parentProduct.variations || [];
-        
-        // Load variation products
-        const variations = variationIds
-            .map(variationId => productsData.products[variationId])
-            .filter(variation => variation && variation.type === 'variation');
+        // Get variations from the parent product (now stored as objects, not IDs)
+        const variations = parentProduct.variations || [];
         
         console.log(`✅ Loaded ${variations.length} variations for product: ${parentProduct.name}`);
         

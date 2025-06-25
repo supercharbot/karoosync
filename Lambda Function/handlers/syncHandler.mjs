@@ -511,15 +511,24 @@ function normalizeWooCommerceData(rawData) {
     
     // 1. Normalize products
     const normalizedProducts = {};
-    
-    // Add main products
-    rawProducts.forEach(product => {
-        normalizedProducts[product.id] = normalizeProduct(product);
-    });
-    
-    // Add variations as separate products
+
+    // Group variations by parent_id
+    const variationsByParent = {};
     rawVariations.forEach(variation => {
-        normalizedProducts[variation.id] = normalizeProduct(variation);
+        const parentId = variation.parent_id;
+        if (!variationsByParent[parentId]) {
+            variationsByParent[parentId] = [];
+        }
+        variationsByParent[parentId].push(variation);
+    });
+
+    // Add main products with their variations
+    rawProducts.forEach(product => {
+        // Attach variations to variable products
+        if (product.type === 'variable' && variationsByParent[product.id]) {
+            product.variations = variationsByParent[product.id];
+        }
+        normalizedProducts[product.id] = normalizeProduct(product);
     });
     
     // 2. Normalize categories with hierarchy
