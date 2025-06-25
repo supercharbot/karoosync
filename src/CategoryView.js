@@ -266,7 +266,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
             {displayData.map((category) => (
               <div
                 key={category.id || category.key}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
               >
                 <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                   <div 
@@ -289,7 +289,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
                       </button>
                       
                       {categoryMenuOpen === category.id && (
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-10">
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50">
                           <button
                             onClick={(e) => handleEditCategory(category, e)}
                             className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
