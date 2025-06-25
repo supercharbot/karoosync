@@ -317,6 +317,33 @@ export async function cancelSubscription(authToken) {
 }
 
 // ============================================
+// SEARCH FUNCTIONS
+// ============================================
+
+export async function searchProducts(searchTerm, options = {}, authToken) {
+  console.log(`🔍 Searching products: "${searchTerm}"`);
+  
+  const { limit = 50, offset = 0, category, status, type } = options;
+  
+  const params = new URLSearchParams({
+    action: 'search',
+    q: searchTerm,
+    limit: limit.toString(),
+    offset: offset.toString()
+  });
+  
+  if (category) params.append('category', category);
+  if (status) params.append('status', status);
+  if (type) params.append('type', type);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
+// ============================================
 // UTILITY FUNCTIONS
 // ============================================
 

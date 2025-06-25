@@ -189,13 +189,10 @@ async function checkUserData(userId) {
             };
         }
         
-        // Load categories for UI structure
-        const categoriesData = await loadCategoriesData(userId);
-        
-        // Build availableCategories array (ADD THIS SECTION)
+        // Build availableCategories array from category index
         const categoryIndex = await loadCategoryIndex(userId);
         const availableCategories = [];
-        
+
         // Add category keys for each category that has products
         Object.keys(categoryIndex.category_products || {}).forEach(categoryId => {
             if (categoryId === 'uncategorized') {
@@ -204,6 +201,29 @@ async function checkUserData(userId) {
                 availableCategories.push(`category-${categoryId}`);
             }
         });
+
+        console.log(`✅ Available categories: ${availableCategories.join(', ')}`);
+
+        console.log(`✅ User data found - ${storeMetadata.store_info?.total_products || 0} products across ${availableCategories.length} categories`);
+
+        // Load categories using the corrected loadCategories function
+        const categoriesResult = await loadCategories(userId);
+        const categories = categoriesResult.success ? categoriesResult.categories : [];
+
+        return {
+            success: true,
+            hasData: true,
+            structure: 'unified',
+            availableCategories: availableCategories,
+            metadata: {
+                ...storeMetadata,
+                categories: categories,
+                totalProducts: storeMetadata.store_info?.total_products || 0,
+                totalCategories: categories.length, // Use actual loaded categories count
+                lastSync: storeMetadata.sync_status?.last_sync,
+                architectureVersion: storeMetadata.architecture_version || '2.0'
+            }
+        };
         
         console.log(`✅ User data found - ${storeMetadata.store_info?.total_products || 0} products across ${Object.keys(categoriesData.categories || {}).length} categories`);
         
@@ -235,26 +255,48 @@ async function loadCategories(userId) {
     try {
         console.log(`📂 Loading categories for user: ${userId}`);
         
+        // Load categories data and category index
         const categoriesData = await loadCategoriesData(userId);
-        const categories = Object.values(categoriesData.categories || {});
-        
-        // Add product counts from category index
         const categoryIndex = await loadCategoryIndex(userId);
-        const categoriesWithCounts = categories.map(category => ({
-            ...category,
-            productCount: categoryIndex.category_products?.[category.id]?.length || 0
-        }));
         
-        // Check for uncategorized products
-        const hasUncategorized = categoryIndex.category_products?.['uncategorized']?.length > 0 || false;
+        const allCategories = Object.values(categoriesData.categories || {});
+        console.log(`📊 Found ${allCategories.length} categories in categories.json.gz`);
         
-        console.log(`✅ Loaded ${categories.length} categories`);
+        // Add product counts from category index and filter categories that have products
+        const categoriesWithCounts = allCategories
+            .map(category => ({
+                ...category,
+                productCount: categoryIndex.category_products?.[category.id]?.length || 0
+            }))
+            .filter(category => category.productCount > 0); // Only include categories with products
+        
+        // Add uncategorized if it has products
+        const uncategorizedCount = categoryIndex.category_products?.['uncategorized']?.length || 0;
+        if (uncategorizedCount > 0) {
+            categoriesWithCounts.push({
+                id: 'uncategorized',
+                name: 'Uncategorized',
+                slug: 'uncategorized',
+                parent_id: 0,
+                productCount: uncategorizedCount
+            });
+        }
+        
+        // Sort categories by name
+        categoriesWithCounts.sort((a, b) => {
+            if (a.id === 'uncategorized') return 1;
+            if (b.id === 'uncategorized') return -1;
+            return a.name.localeCompare(b.name);
+        });
+        
+        console.log(`✅ Loaded ${categoriesWithCounts.length} categories with products:`, 
+            categoriesWithCounts.map(c => `${c.name} (${c.productCount})`));
         
         return {
             success: true,
             categories: categoriesWithCounts,
-            hasUncategorized,
-            total: categories.length
+            hasUncategorized: uncategorizedCount > 0,
+            total: categoriesWithCounts.length
         };
         
     } catch (error) {

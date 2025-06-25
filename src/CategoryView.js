@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Image, Search, X, Plus, Grid, List, Filter } from 'lucide-react';
+import { ArrowLeft, Image, Search, X, Plus, Grid, List, MoreHorizontal, Edit, Trash2, Settings } from 'lucide-react';
 import { useAuth } from './AuthContext';
-import { loadCategoryProducts } from './api';
+import { loadCategoryProducts, searchProducts } from './api';
 import LoadingScreen from './LoadingScreen';
 import CreateCategoryModal from './CreateCategoryModal';
 
@@ -16,8 +16,8 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [viewMode, setViewMode] = useState('grid'); // grid or list
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [viewMode, setViewMode] = useState('grid');
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(null);
 
   useEffect(() => {
     if (selectedCategory) {
@@ -51,39 +51,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     setLoading(false);
   };
 
-  const loadAllProducts = async () => {
-    setSearching(true);
-    const authToken = await getAuthToken();
-    const allProducts = [];
-    const availableCategories = userData?.availableCategories || [];
-    
-    try {
-      for (const categoryKey of availableCategories) {
-        try {
-          const result = await loadCategoryProducts(categoryKey, authToken);
-          if (result.success && result.products) {
-            const productsWithCategory = result.products.map(product => ({
-              ...product,
-              _categoryKey: categoryKey,
-              _categoryName: getCategoryName(categoryKey)
-            }));
-            allProducts.push(...productsWithCategory);
-          }
-        } catch (categoryError) {
-          console.error(`Failed to load category ${categoryKey}:`, categoryError);
-        }
-      }
-      
-      setSearching(false);
-      return allProducts;
-      
-    } catch (error) {
-      console.error('Failed to load all products:', error);
-      setSearching(false);
-      return [];
-    }
-  };
-
   const getCategoryName = (categoryKey) => {
     if (categoryKey === 'uncategorized') return 'Uncategorized';
     if (categoryKey.startsWith('category-')) {
@@ -102,47 +69,89 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
       return;
     }
 
-    const searchLower = term.toLowerCase();
+    setSearching(true);
+    const authToken = await getAuthToken();
 
-    if (selectedCategory) {
-      const filtered = products.filter(product => {
-        const nameMatch = product.name?.toLowerCase().includes(searchLower);
-        const skuMatch = product.sku?.toLowerCase().includes(searchLower);
-        return nameMatch || skuMatch;
-      });
-      setSearchResults(filtered);
-      
-    } else if (searchMode === 'categories') {
-      const categories = userData?.metadata?.categories || [];
-      const filtered = categories.filter(category => 
-        category.name?.toLowerCase().includes(searchLower)
-      );
-      setSearchResults(filtered);
-      
-    } else if (searchMode === 'all-products') {
-      const allProducts = await loadAllProducts();
-      const filtered = allProducts.filter(product => {
-        const nameMatch = product.name?.toLowerCase().includes(searchLower);
-        const skuMatch = product.sku?.toLowerCase().includes(searchLower);
-        return nameMatch || skuMatch;
-      });
-      setSearchResults(filtered);
+    try {
+      if (selectedCategory) {
+        // Search within current category products
+        const filtered = products.filter(product => {
+          const nameMatch = product.name?.toLowerCase().includes(term.toLowerCase());
+          const skuMatch = product.sku?.toLowerCase().includes(term.toLowerCase());
+          return nameMatch || skuMatch;
+        });
+        setSearchResults(filtered);
+        
+      } else if (searchMode === 'categories') {
+        // Search categories locally
+        const categories = userData?.metadata?.categories || [];
+        const filtered = categories.filter(category => 
+          category.name?.toLowerCase().includes(term.toLowerCase())
+        );
+        setSearchResults(filtered);
+        
+      } else if (searchMode === 'all-products') {
+        // Use optimized search API with search index
+        const result = await searchProducts(term, { limit: 100 }, authToken);
+        if (result.success) {
+          const productsWithCategory = result.products.map(product => ({
+            ...product,
+            _categoryName: getCategoryNameFromProduct(product)
+          }));
+          setSearchResults(productsWithCategory);
+        } else {
+          setSearchResults([]);
+          console.error('Search failed:', result.error);
+        }
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
     }
+    
+    setSearching(false);
+  };
+
+  const getCategoryNameFromProduct = (product) => {
+    if (!product.categories || product.categories.length === 0) return 'Uncategorized';
+    const category = userData?.metadata?.categories?.find(cat => 
+      cat.id === product.categories[0].id
+    );
+    return category ? category.name : 'Unknown Category';
   };
 
   const handleProductClick = (product) => {
-    if (product._categoryKey && !selectedCategory) {
-      onProductSelect(product);
-    } else {
-      onProductSelect(product);
-    }
+    onProductSelect(product);
   };
 
   const handleCategoryCreated = (newCategory) => {
-    // Refresh data to show new category
+    setShowCreateModal(false);
     if (onDataUpdate) {
       onDataUpdate();
     }
+  };
+
+  const handleCategoryMenuClick = (categoryId, e) => {
+    e.stopPropagation();
+    setCategoryMenuOpen(categoryMenuOpen === categoryId ? null : categoryId);
+  };
+
+  const handleEditCategory = (category, e) => {
+    e.stopPropagation();
+    setCategoryMenuOpen(null);
+    console.log('Edit category:', category);
+  };
+
+  const handleDeleteCategory = (category, e) => {
+    e.stopPropagation();
+    setCategoryMenuOpen(null);
+    console.log('Delete category:', category);
+  };
+
+  const handleConfigureCategory = (category, e) => {
+    e.stopPropagation();
+    setCategoryMenuOpen(null);
+    console.log('Configure category:', category);
   };
 
   const getDisplayData = () => {
@@ -153,8 +162,8 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
       return products;
     }
     
-    // Show only top-level categories (parent = 0)
-    const categories = userData?.metadata?.categories?.filter(cat => cat.parent === 0) || [];
+    // Show only top-level categories (parent_id = 0)
+    const categories = userData?.metadata?.categories?.filter(cat => cat.parent_id === 0) || [];
     const hasUncategorized = userData?.availableCategories?.includes('uncategorized');
     const sortedCategories = [...categories].sort((a, b) => (b.productCount || 0) - (a.productCount || 0));
     
@@ -166,7 +175,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
 
   const displayData = getDisplayData();
 
-  // Top-level categories view
+  // Categories view (no category selected)
   if (!selectedCategory) {
     return (
       <div className="p-4 lg:p-6 bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-64px)] lg:min-h-[calc(100vh-73px)]">
@@ -180,116 +189,61 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <h2 className="text-xl lg:text-2xl font-semibold text-gray-800 dark:text-gray-200">
-            Categories ({userData?.metadata?.categories?.length + (userData?.availableCategories?.includes('uncategorized') ? 1 : 0) || 0})
+            Categories ({userData?.metadata?.categories?.length + (userData?.availableCategories?.includes('uncategorized') ? 1 : 0)})
           </h2>
-          <button 
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors font-medium text-sm lg:text-base"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create Category
-          </button>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="mb-6">
-          <div className="flex flex-col sm:flex-row gap-3 mb-3">
-            <div className="relative flex-1 max-w-md">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-              </div>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => handleSearch(e.target.value)}
-                placeholder={searchMode === 'categories' ? 'Search categories...' : 'Search all products...'}
-                className="block w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => {
-                    setSearchTerm('');
-                    setSearchResults([]);
-                  }}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                >
-                  <X className="h-5 w-5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300" />
-                </button>
-              )}
-            </div>
-            
-            {/* Desktop Search Mode Toggle */}
-            <div className="hidden sm:flex rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700">
-              <button
-                onClick={() => {
-                  setSearchMode('categories');
-                  setSearchTerm('');
-                  setSearchResults([]);
-                }}
-                className={`px-4 py-3 text-sm font-medium rounded-l-lg transition-colors ${
-                  searchMode === 'categories'
-                    ? 'bg-blue-600 dark:bg-blue-500 text-white'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
-                }`}
-              >
-                Categories
-              </button>
-              <button
-                onClick={() => {
-                  setSearchMode('all-products');
-                  setSearchTerm('');
-                  setSearchResults([]);
-                }}
-                className={`px-4 py-3 text-sm font-medium rounded-r-lg border-l border-gray-300 dark:border-gray-600 transition-colors ${
-                  searchMode === 'all-products'
-                    ? 'bg-blue-600 dark:bg-blue-500 text-white'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
-                }`}
-              >
-                All Products
-              </button>
-            </div>
-
-            {/* Mobile Filter Toggle */}
+          
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowMobileFilters(!showMobileFilters)}
-              className="sm:hidden px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
             >
-              <Filter className="w-5 h-5" />
+              <Plus className="w-4 h-4 mr-2" />
+              Create Category
             </button>
           </div>
+        </div>
 
-          {/* Mobile Search Mode Toggle */}
-          {showMobileFilters && (
-            <div className="sm:hidden mb-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Search Mode</h4>
-              <div className="flex gap-2">
+        {/* Search */}
+        <div className="mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search categories or products..."
+              value={searchTerm}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="w-full pl-10 pr-10 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => handleSearch('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          
+          {!searchTerm && (
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Search in:</span>
+              <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                 <button
-                  onClick={() => {
-                    setSearchMode('categories');
-                    setSearchTerm('');
-                    setSearchResults([]);
-                    setShowMobileFilters(false);
-                  }}
-                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  onClick={() => setSearchMode('categories')}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     searchMode === 'categories'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300'
                   }`}
                 >
                   Categories
                 </button>
                 <button
-                  onClick={() => {
-                    setSearchMode('all-products');
-                    setSearchTerm('');
-                    setSearchResults([]);
-                    setShowMobileFilters(false);
-                  }}
-                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  onClick={() => setSearchMode('all-products')}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     searchMode === 'all-products'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300'
                   }`}
                 >
                   All Products
@@ -299,7 +253,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
           )}
           
           {searchTerm && (
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
               <span className="font-medium">{displayData.length}</span> {searchMode === 'categories' ? 'categories' : 'products'} found
               {searching && <span className="ml-2 text-blue-600 dark:text-blue-400">Loading...</span>}
             </p>
@@ -312,16 +266,55 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
             {displayData.map((category) => (
               <div
                 key={category.id || category.key}
-                onClick={() => onCategorySelect(category.isUncategorized ? { name: 'Uncategorized', key: 'uncategorized' } : { name: category.name, key: `category-${category.id}` })}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600 transition-all"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
               >
-                <div className="flex justify-between items-center">
-                  <div>
+                <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  <div 
+                    onClick={() => onCategorySelect(category.isUncategorized ? { name: 'Uncategorized', key: 'uncategorized' } : { name: category.name, key: `category-${category.id}` })}
+                    className="flex-1 cursor-pointer"
+                  >
                     <h3 className="font-medium text-gray-900 dark:text-gray-100">{category.name}</h3>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                       {category.isUncategorized ? 'Products without categories' : `${category.productCount || category.count || 0} products`}
                     </span>
                   </div>
+
+                  {!category.isUncategorized && (
+                    <div className="relative">
+                      <button
+                        onClick={(e) => handleCategoryMenuClick(category.id, e)}
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                      >
+                        <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                      </button>
+                      
+                      {categoryMenuOpen === category.id && (
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-10">
+                          <button
+                            onClick={(e) => handleEditCategory(category, e)}
+                            className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Edit Category
+                          </button>
+                          <button
+                            onClick={(e) => handleConfigureCategory(category, e)}
+                            className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                          >
+                            <Settings className="w-4 h-4 mr-2" />
+                            Configure
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteCategory(category, e)}
+                            className="w-full flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete Category
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -345,9 +338,16 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
               No categories found
             </h3>
-            <p className="text-gray-500 dark:text-gray-400">
+            <p className="text-gray-500 dark:text-gray-400 mb-4">
               Your store doesn't have any categories yet.
             </p>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Category
+            </button>
           </div>
         )}
 
@@ -370,13 +370,18 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     return <LoadingScreen message={`Loading ${selectedCategory.name} products...`} />;
   }
 
-  // Selected category view
+  // Selected category view (products)
   return (
     <div className="p-4 lg:p-6 bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-64px)] lg:min-h-[calc(100vh-73px)]">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center">
-          
+          <button
+            onClick={onBack}
+            className="mr-3 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
           <div>
             <h2 className="text-xl lg:text-2xl font-semibold text-gray-800 dark:text-gray-200">
               {selectedCategory.name}
@@ -388,13 +393,12 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="inline-flex items-center px-4 py-2 bg-green-600 dark:bg-green-500 text-white rounded-lg hover:bg-green-700 dark:hover:bg-green-600 transition-colors font-medium text-sm lg:text-base">
+          <button className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm">
             <Plus className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Create Product</span>
-            <span className="sm:hidden">Product</span>
+            Create Product
           </button>
 
-          {/* View Mode Toggle - Desktop only */}
+          {/* View Mode Toggle */}
           <div className="hidden lg:flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <button
               onClick={() => setViewMode('grid')}
@@ -422,26 +426,21 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
 
       {/* Search */}
       <div className="mb-6">
-        <div className="relative max-w-md">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-          </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
+            placeholder="Search products..."
             value={searchTerm}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder={`Search in ${selectedCategory.name}...`}
-            className="block w-full pl-10 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-10 pr-10 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           {searchTerm && (
             <button
-              onClick={() => {
-                setSearchTerm('');
-                setSearchResults([]);
-              }}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+              onClick={() => handleSearch('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
             >
-              <X className="h-5 w-5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -453,7 +452,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
         )}
       </div>
 
-      {/* Child Categories (Folders) */}
+      {/* Child Categories */}
       {!searchTerm && childCategories.length > 0 && (
         <div className="mb-8">
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Categories</h3>
@@ -468,7 +467,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
                   <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mr-3 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/40 transition-colors">
                     <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -493,71 +491,53 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
       <div className={
         viewMode === 'grid' 
           ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4"
-          : "space-y-4"
+          : "space-y-3"
       }>
-        {displayData.map((product, index) => (
+        {displayData.map((product) => (
           <ProductCard
-            key={`${product.id}-${index}`}
+            key={product.id}
             product={product}
-            onProductSelect={onProductSelect}
+            onProductSelect={handleProductClick}
             viewMode={viewMode}
           />
         ))}
       </div>
 
-      {/* Empty States */}
-      {displayData.length === 0 && !searchTerm && (
+      {/* Empty State */}
+      {displayData.length === 0 && (
         <div className="text-center py-12">
+          <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-            No products found
+            {searchTerm ? 'No products found' : 'No products in this category'}
           </h3>
           <p className="text-gray-500 dark:text-gray-400">
-            This category doesn't contain any products yet.
-          </p>
-        </div>
-      )}
-
-      {displayData.length === 0 && searchTerm && (
-        <div className="text-center py-12">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-            No products found
-          </h3>
-          <p className="text-gray-500 dark:text-gray-400">
-            No products match "{searchTerm}"
+            {searchTerm 
+              ? `No products match "${searchTerm}"`
+              : 'This category doesn\'t have any products yet.'
+            }
           </p>
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div className="text-center py-12">
-          <h3 className="text-lg font-medium text-red-600 dark:text-red-400 mb-2">
-            Error Loading Products
-          </h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">
-            {error}
-          </p>
-          <button
-            onClick={loadProducts}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Try Again
-          </button>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+          <p className="text-red-600">{error}</p>
         </div>
       )}
     </div>
   );
 };
 
-// Product Card Component - supports both grid and list views
-const ProductCard = ({ product, onProductSelect, viewMode = 'grid' }) => {
+// Product Card Component
+const ProductCard = ({ product, onProductSelect, viewMode }) => {
   if (viewMode === 'list') {
     return (
       <div
         onClick={() => onProductSelect(product)}
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md transition-all hover:translate-y-[-1px] flex items-center gap-4"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md transition-all flex items-center space-x-4"
       >
-        <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0">
+        <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg flex-shrink-0 overflow-hidden">
           {product.images?.[0] ? (
             <img
               src={product.images[0].src}
