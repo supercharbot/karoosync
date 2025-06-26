@@ -120,13 +120,13 @@ export const handler = async (event) => {
         }
         
         // Store settings operations
-        if (action === 'load-attributes' || action === 'load-shipping-classes' || 
+        if (action === 'load-attributes' || action === 'load-shipping-classes' || action === 'load-shipping-zones' || action === 'load-shipping-methods' ||
             action === 'load-tags' || action === 'load-tax-classes' ||
-            action === 'create-attribute' || action === 'create-shipping-class' ||
+            action === 'create-attribute' || action === 'create-shipping-class' || action === 'create-shipping-zone' || action === 'create-shipping-method' ||
             action === 'create-tag' || action === 'create-tax-class' ||
-            action === 'update-attribute' || action === 'update-shipping-class' ||
+            action === 'update-attribute' || action === 'update-shipping-class' || action === 'update-shipping-zone' || action === 'update-shipping-method' ||
             action === 'update-tag' || action === 'update-tax-class' ||
-            action === 'delete-attribute' || action === 'delete-shipping-class' ||
+            action === 'delete-attribute' || action === 'delete-shipping-class' || action === 'delete-shipping-zone' || action === 'delete-shipping-method' ||
             action === 'delete-tag' || action === 'delete-tax-class') {
             console.log('🏪 Routing to Store handler');
             return await handleStore(event, userId);

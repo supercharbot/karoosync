@@ -403,9 +403,9 @@ async function extractWooCommerceData(url, username, appPassword, userId, syncId
         });
         
         // Fetch supplementary data
-        const [attributes, shippingClasses, tags] = await Promise.all([
+        const [attributes, shippingData, tags] = await Promise.all([
             makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/attributes', auth, { per_page: 100 }),
-            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/shipping_classes', auth, { per_page: 100 }),
+            fetchAllShippingData(baseUrl, auth),
             makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/tags', auth, { per_page: 100 })
         ]);
         
@@ -480,7 +480,7 @@ async function extractWooCommerceData(url, username, appPassword, userId, syncId
             variations: variations || [],
             categories: categories || [],
             attributes: enhancedAttributes || [],
-            shippingClasses: shippingClasses || [],
+            shipping: shippingData || { classes: [], zones: [], methods: [] },
             taxClasses: taxClasses || [],
             tags: tags || [],
             totalProducts: products.length + variations.length,
@@ -488,7 +488,7 @@ async function extractWooCommerceData(url, username, appPassword, userId, syncId
             extractionTime: totalTime,
             isComplete: true
         };
-        
+                
     } catch (error) {
         console.error('❌ Data extraction failed:', error);
         throw new Error(`Failed to extract WooCommerce data: ${error.message}`);
@@ -504,7 +504,7 @@ function normalizeWooCommerceData(rawData) {
         variations: rawVariations,
         categories: rawCategories,
         attributes: rawAttributes,
-        shippingClasses: rawShippingClasses,
+        shipping: rawShipping,
         taxClasses: rawTaxClasses,
         tags: rawTags
     } = rawData;
@@ -592,15 +592,48 @@ function normalizeWooCommerceData(rawData) {
         };
     });
     
-    // 4. Normalize shipping classes
-    const normalizedShippingClasses = {};
-    rawShippingClasses.forEach(shippingClass => {
-        normalizedShippingClasses[shippingClass.id] = {
+    // 4. Normalize shipping data
+    const normalizedShipping = {
+        classes: {},
+        zones: {},
+        methods: {}
+    };
+
+    // Normalize shipping classes
+    (rawShipping.classes || []).forEach(shippingClass => {
+        normalizedShipping.classes[shippingClass.id] = {
             id: shippingClass.id,
             name: shippingClass.name,
             slug: shippingClass.slug,
             description: shippingClass.description || '',
             count: shippingClass.count || 0
+        };
+    });
+
+    // Normalize shipping zones
+    (rawShipping.zones || []).forEach(zone => {
+        normalizedShipping.zones[zone.id] = {
+            id: zone.id,
+            name: zone.name,
+            order: zone.order || 0,
+            locations: zone.locations || [],
+            detailed_locations: zone.detailed_locations || []
+        };
+    });
+
+    // Normalize shipping methods
+    (rawShipping.methods || []).forEach(method => {
+        normalizedShipping.methods[method.id] = {
+            id: method.id,
+            zone_id: method.zone_id,
+            zone_name: method.zone_name,
+            instance_id: method.instance_id,
+            title: method.title,
+            order: method.order || 0,
+            enabled: method.enabled || false,
+            method_id: method.method_id,
+            method_title: method.method_title,
+            settings: method.settings || {}
         };
     });
     
@@ -634,7 +667,7 @@ function normalizeWooCommerceData(rawData) {
         products: normalizedProducts,
         categories: { categories: normalizedCategories, hierarchy: categoryHierarchy },
         attributes: normalizedAttributes,
-        shippingClasses: normalizedShippingClasses,
+        shipping: normalizedShipping,
         taxClasses: normalizedTaxClasses,
         tags: normalizedTags
     };
@@ -845,6 +878,60 @@ function buildIndexes(normalizedData) {
     };
 }
 
+// Fetch all shipping-related data
+async function fetchAllShippingData(baseUrl, auth) {
+    console.log('🚢 Fetching comprehensive shipping data...');
+    
+    try {
+        const [shippingClasses, shippingZones] = await Promise.all([
+            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/shipping_classes', auth, { per_page: 100 }),
+            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/shipping/zones', auth, { per_page: 100 })
+        ]);
+        
+        // Fetch methods and locations for each zone
+        const allMethods = [];
+        const enhancedZones = [];
+
+        for (const zone of shippingZones) {
+            try {
+                // Fetch methods
+                const methods = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/shipping/zones/${zone.id}/methods`, auth, { per_page: 100 });
+                methods.forEach(method => {
+                    method.zone_id = zone.id;
+                    method.zone_name = zone.name;
+                });
+                allMethods.push(...methods);
+
+                // Fetch detailed locations
+                const locations = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/shipping/zones/${zone.id}/locations`, auth, { per_page: 100 });
+                enhancedZones.push({
+                    ...zone,
+                    detailed_locations: locations
+                });
+            } catch (error) {
+                console.warn(`⚠️ Could not fetch data for zone ${zone.id}:`, error.message);
+                enhancedZones.push(zone);
+            }
+        }
+        
+        console.log(`✅ Shipping data: ${shippingClasses.length} classes, ${shippingZones.length} zones, ${allMethods.length} methods`);
+        
+        return {
+            classes: shippingClasses,
+            zones: enhancedZones, // Use enhanced zones with detailed_locations
+            methods: allMethods
+        };
+        
+    } catch (error) {
+        console.warn('⚠️ Shipping data fetch failed:', error.message);
+        return {
+            classes: [],
+            zones: [],
+            methods: []
+        };
+    }
+}
+
 // Store all data in new S3 architecture
 async function storeInS3(userId, normalizedData, syncId) {
     console.log('💾 Storing data in new S3 architecture...');
@@ -888,9 +975,23 @@ async function storeInS3(userId, normalizedData, syncId) {
                 }
             },
             {
-                key: `users/${userId}/shipping-classes.json.gz`,
+                key: `users/${userId}/shipping/classes.json.gz`,
                 data: {
-                    shipping_classes: normalizedData.shippingClasses,
+                    classes: normalizedData.shipping.classes,
+                    last_updated: timestamp
+                }
+            },
+            {
+                key: `users/${userId}/shipping/zones.json.gz`,
+                data: {
+                    zones: normalizedData.shipping.zones,
+                    last_updated: timestamp
+                }
+            },
+            {
+                key: `users/${userId}/shipping/methods.json.gz`,
+                data: {
+                    methods: normalizedData.shipping.methods,
                     last_updated: timestamp
                 }
             },
@@ -935,7 +1036,7 @@ async function storeInS3(userId, normalizedData, syncId) {
                         total_products: Object.keys(normalizedData.products).length,
                         total_categories: Object.keys(normalizedData.categories.categories).length,
                         total_attributes: Object.keys(normalizedData.attributes).length,
-                        total_shipping_classes: Object.keys(normalizedData.shippingClasses).length,
+                        total_shipping_classes: Object.keys(normalizedData.shipping.classes).length,
                         total_tags: Object.keys(normalizedData.tags).length
                     },
                     sync_status: {

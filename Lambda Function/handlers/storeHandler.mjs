@@ -14,7 +14,9 @@ const CORS_HEADERS = {
 // Store data file mapping
 const STORE_FILES = {
     attributes: 'attributes.json.gz',
-    'shipping-classes': 'shipping-classes.json.gz',
+    'shipping-classes': 'shipping/classes.json.gz',
+    'shipping-zones': 'shipping/zones.json.gz', 
+    'shipping-methods': 'shipping/methods.json.gz',
     tags: 'tags.json.gz',
     'tax-classes': 'tax-classes.json.gz'
 };
