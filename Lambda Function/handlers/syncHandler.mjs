@@ -398,66 +398,6 @@ async function extractWooCommerceData(url, username, appPassword, userId, syncId
         
         await updateSyncStatus(userId, syncId, {
             status: 'processing',
-            progress: 65,
-            message: 'Fetching attributes and shipping classes...'
-        });
-        
-        // Fetch supplementary data
-        const [attributes, shippingData, tags] = await Promise.all([
-            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/attributes', auth, { per_page: 100 }),
-            fetchAllShippingData(baseUrl, auth),
-            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/tags', auth, { per_page: 100 })
-        ]);
-        
-        // Fetch tax classes
-        let taxClasses = [];
-        try {
-            taxClasses = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/taxes/classes', auth);
-        } catch (error) {
-            console.warn('⚠️ Tax classes not available, using default');
-            taxClasses = [{ id: 1, slug: 'standard', name: 'Standard' }];
-        }
-        
-        await updateSyncStatus(userId, syncId, {
-            status: 'processing',
-            progress: 70,
-            message: 'Fetching attribute terms...'
-        });
-        
-        // Fetch attribute terms
-        const enhancedAttributes = [];
-        for (let i = 0; i < (attributes || []).length; i++) {
-            const attribute = attributes[i];
-            try {
-                const terms = await makeWordPressRequest(
-                    baseUrl, 
-                    `/wp-json/wc/v3/products/attributes/${attribute.id}/terms`, 
-                    auth, 
-                    { per_page: 100 }
-                );
-                
-                enhancedAttributes.push({
-                    ...attribute,
-                    terms: terms || []
-                });
-                
-                console.log(`✅ Loaded ${terms?.length || 0} terms for attribute "${attribute.name}"`);
-            } catch (error) {
-                console.warn(`⚠️ Failed to fetch terms for attribute ${attribute.id}:`, error.message);
-                enhancedAttributes.push({ ...attribute, terms: [] });
-            }
-            
-            // Rate limiting and progress update
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await updateSyncStatus(userId, syncId, {
-                status: 'processing',
-                progress: 70 + ((i / attributes.length) * 10),
-                message: `Fetching attribute terms... (${i + 1}/${attributes.length})`
-            });
-        }
-        
-        await updateSyncStatus(userId, syncId, {
-            status: 'processing',
             progress: 80,
             message: 'Fetching product variations...'
         });
@@ -479,10 +419,6 @@ async function extractWooCommerceData(url, username, appPassword, userId, syncId
             products: products || [],
             variations: variations || [],
             categories: categories || [],
-            attributes: enhancedAttributes || [],
-            shipping: shippingData || { classes: [], zones: [], methods: [] },
-            taxClasses: taxClasses || [],
-            tags: tags || [],
             totalProducts: products.length + variations.length,
             extractedAt: new Date().toISOString(),
             extractionTime: totalTime,
@@ -502,11 +438,7 @@ function normalizeWooCommerceData(rawData) {
     const {
         products: rawProducts,
         variations: rawVariations,
-        categories: rawCategories,
-        attributes: rawAttributes,
-        shipping: rawShipping,
-        taxClasses: rawTaxClasses,
-        tags: rawTags
+        categories: rawCategories
     } = rawData;
     
     // 1. Normalize products
@@ -567,109 +499,12 @@ function normalizeWooCommerceData(rawData) {
         }
     });
     
-    // 3. Normalize attributes
-    const normalizedAttributes = {};
-    rawAttributes.forEach(attribute => {
-        const terms = {};
-        (attribute.terms || []).forEach(term => {
-            terms[term.id] = {
-                id: term.id,
-                name: term.name,
-                slug: term.slug,
-                description: term.description || '',
-                count: term.count || 0
-            };
-        });
-        
-        normalizedAttributes[attribute.id] = {
-            id: attribute.id,
-            name: attribute.name,
-            slug: attribute.slug,
-            type: attribute.type || 'select',
-            order_by: attribute.order_by || 'menu_order',
-            has_archives: attribute.has_archives || false,
-            terms: terms
-        };
-    });
-    
-    // 4. Normalize shipping data
-    const normalizedShipping = {
-        classes: {},
-        zones: {},
-        methods: {}
-    };
-
-    // Normalize shipping classes
-    (rawShipping.classes || []).forEach(shippingClass => {
-        normalizedShipping.classes[shippingClass.id] = {
-            id: shippingClass.id,
-            name: shippingClass.name,
-            slug: shippingClass.slug,
-            description: shippingClass.description || '',
-            count: shippingClass.count || 0
-        };
-    });
-
-    // Normalize shipping zones
-    (rawShipping.zones || []).forEach(zone => {
-        normalizedShipping.zones[zone.id] = {
-            id: zone.id,
-            name: zone.name,
-            order: zone.order || 0,
-            locations: zone.locations || [],
-            detailed_locations: zone.detailed_locations || []
-        };
-    });
-
-    // Normalize shipping methods
-    (rawShipping.methods || []).forEach(method => {
-        normalizedShipping.methods[method.id] = {
-            id: method.id,
-            zone_id: method.zone_id,
-            zone_name: method.zone_name,
-            instance_id: method.instance_id,
-            title: method.title,
-            order: method.order || 0,
-            enabled: method.enabled || false,
-            method_id: method.method_id,
-            method_title: method.method_title,
-            settings: method.settings || {}
-        };
-    });
-    
-    // 5. Normalize tax classes
-    const normalizedTaxClasses = {};
-    rawTaxClasses.forEach((taxClass, index) => {
-        const id = taxClass.id || index + 1;
-        normalizedTaxClasses[id] = {
-            id: id,
-            name: taxClass.name,
-            slug: taxClass.slug || taxClass.name?.toLowerCase().replace(/\s+/g, '-') || 'standard'
-        };
-    });
-    
-    // 6. Normalize tags
-    const normalizedTags = {};
-    rawTags.forEach(tag => {
-        normalizedTags[tag.id] = {
-            id: tag.id,
-            name: tag.name,
-            slug: tag.slug,
-            description: tag.description || '',
-            count: tag.count || 0
-        };
-    });
-    
     console.log('✅ Data normalization completed');
-    console.log(`📊 Normalized: ${Object.keys(normalizedProducts).length} products, ${Object.keys(normalizedCategories).length} categories, ${Object.keys(normalizedAttributes).length} attributes`);
+    console.log(`📊 Normalized: ${Object.keys(normalizedProducts).length} products, ${Object.keys(normalizedCategories).length} categories`);
     
     return {
         products: normalizedProducts,
-        categories: { categories: normalizedCategories, hierarchy: categoryHierarchy },
-        attributes: normalizedAttributes,
-        shipping: normalizedShipping,
-        taxClasses: normalizedTaxClasses,
-        tags: normalizedTags
+        categories: { categories: normalizedCategories, hierarchy: categoryHierarchy }
     };
 }
 
@@ -683,14 +518,10 @@ function normalizeProduct(product) {
 
     console.log(`✅ Product ${product.id} final category_ids:`, categoryIds);
     
-    // Extract tag IDs  
+    // Keep product-level references but don't rely on global data
     const tagIds = (product.tags || []).map(tag => tag.id);
-    
-    // Get shipping class ID
     const shippingClassId = product.shipping_class_id || 
         (product.shipping_class ? parseInt(product.shipping_class) : null);
-    
-    // Get tax class ID (will need mapping)
     const taxClassId = product.tax_class || 'standard';
     
     // Normalize attributes
@@ -878,60 +709,6 @@ function buildIndexes(normalizedData) {
     };
 }
 
-// Fetch all shipping-related data
-async function fetchAllShippingData(baseUrl, auth) {
-    console.log('🚢 Fetching comprehensive shipping data...');
-    
-    try {
-        const [shippingClasses, shippingZones] = await Promise.all([
-            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/shipping_classes', auth, { per_page: 100 }),
-            makeWordPressRequest(baseUrl, '/wp-json/wc/v3/shipping/zones', auth, { per_page: 100 })
-        ]);
-        
-        // Fetch methods and locations for each zone
-        const allMethods = [];
-        const enhancedZones = [];
-
-        for (const zone of shippingZones) {
-            try {
-                // Fetch methods
-                const methods = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/shipping/zones/${zone.id}/methods`, auth, { per_page: 100 });
-                methods.forEach(method => {
-                    method.zone_id = zone.id;
-                    method.zone_name = zone.name;
-                });
-                allMethods.push(...methods);
-
-                // Fetch detailed locations
-                const locations = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/shipping/zones/${zone.id}/locations`, auth, { per_page: 100 });
-                enhancedZones.push({
-                    ...zone,
-                    detailed_locations: locations
-                });
-            } catch (error) {
-                console.warn(`⚠️ Could not fetch data for zone ${zone.id}:`, error.message);
-                enhancedZones.push(zone);
-            }
-        }
-        
-        console.log(`✅ Shipping data: ${shippingClasses.length} classes, ${shippingZones.length} zones, ${allMethods.length} methods`);
-        
-        return {
-            classes: shippingClasses,
-            zones: enhancedZones, // Use enhanced zones with detailed_locations
-            methods: allMethods
-        };
-        
-    } catch (error) {
-        console.warn('⚠️ Shipping data fetch failed:', error.message);
-        return {
-            classes: [],
-            zones: [],
-            methods: []
-        };
-    }
-}
-
 // Store all data in new S3 architecture
 async function storeInS3(userId, normalizedData, syncId) {
     console.log('💾 Storing data in new S3 architecture...');
@@ -966,49 +743,6 @@ async function storeInS3(userId, normalizedData, syncId) {
                     last_updated: timestamp
                 }
             },
-            {
-                key: `users/${userId}/attributes.json.gz`,
-                data: {
-                    attributes: normalizedData.attributes,
-                    custom_attributes: {},
-                    last_updated: timestamp
-                }
-            },
-            {
-                key: `users/${userId}/shipping/classes.json.gz`,
-                data: {
-                    classes: normalizedData.shipping.classes,
-                    last_updated: timestamp
-                }
-            },
-            {
-                key: `users/${userId}/shipping/zones.json.gz`,
-                data: {
-                    zones: normalizedData.shipping.zones,
-                    last_updated: timestamp
-                }
-            },
-            {
-                key: `users/${userId}/shipping/methods.json.gz`,
-                data: {
-                    methods: normalizedData.shipping.methods,
-                    last_updated: timestamp
-                }
-            },
-            {
-                key: `users/${userId}/tax-classes.json.gz`,
-                data: {
-                    tax_classes: normalizedData.taxClasses,
-                    last_updated: timestamp
-                }
-            },
-            {
-                key: `users/${userId}/tags.json.gz`,
-                data: {
-                    tags: normalizedData.tags,
-                    last_updated: timestamp
-                }
-            },
             
             // Index files
             {
@@ -1034,10 +768,7 @@ async function storeInS3(userId, normalizedData, syncId) {
                 data: {
                     store_info: {
                         total_products: Object.keys(normalizedData.products).length,
-                        total_categories: Object.keys(normalizedData.categories.categories).length,
-                        total_attributes: Object.keys(normalizedData.attributes).length,
-                        total_shipping_classes: Object.keys(normalizedData.shipping.classes).length,
-                        total_tags: Object.keys(normalizedData.tags).length
+                        total_categories: Object.keys(normalizedData.categories.categories).length
                     },
                     sync_status: {
                         last_sync: timestamp,
@@ -1074,9 +805,10 @@ async function storeInS3(userId, normalizedData, syncId) {
         
         return {
             success: true,
-            architecture_version: '2.0',
+            architecture_version: '2.0-focused',
             files_created: files.length,
-            total_products: Object.keys(normalizedData.products).length,
+            total_products: Object.keys(normalizedData.products || {}).length,
+            total_categories: Object.keys(normalizedData.categories?.categories || {}).length,
             sync_completed_at: timestamp
         };
         
@@ -1129,7 +861,6 @@ async function processBackgroundSync(event) {
                 metadata: {
                     totalProducts: Object.keys(normalizedData.products).length,
                     totalCategories: Object.keys(normalizedData.categories.categories).length,
-                    totalAttributes: Object.keys(normalizedData.attributes).length,
                     extractedAt: rawData.extractedAt,
                     isComplete: rawData.isComplete
                 }
