@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Image, Search, X, Plus, Grid, List, MoreHorizontal, Edit, Trash2, Settings } from 'lucide-react';
+import { ArrowLeft, Image, Search, X, Plus, Grid, List, MoreHorizontal, Trash2, Copy, FolderOpen } from 'lucide-react';
 import { useAuth } from './AuthContext';
-import { loadCategoryProducts, searchProducts } from './api';
+import { loadCategoryProducts, searchProducts, deleteCategory, updateProduct, duplicateProduct, deleteProduct } from './api';
 import LoadingScreen from './LoadingScreen';
 import CreateCategoryModal from './CreateCategoryModal';
+import { DeleteConfirmModal, DuplicateProductModal, MoveProductModal } from './ActionModals';
 
 const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductSelect, onBack, onDataUpdate, parentCategoryName }) => {
   const { getAuthToken } = useAuth();
@@ -18,6 +19,11 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(null);
+  const [productMenuOpen, setProductMenuOpen] = useState(null);
+  const [operationLoading, setOperationLoading] = useState(null);
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, item: null, type: null });
+  const [duplicateModal, setDuplicateModal] = useState({ isOpen: false, product: null });
+  const [moveModal, setMoveModal] = useState({ isOpen: false, product: null });
 
   useEffect(() => {
     if (selectedCategory) {
@@ -29,6 +35,16 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     setSearchTerm('');
     setSearchResults([]);
   }, [selectedCategory, searchMode]);
+
+  // Close menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setCategoryMenuOpen(null);
+      setProductMenuOpen(null);
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const loadProducts = async () => {
     setLoading(true);
@@ -136,22 +152,127 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     setCategoryMenuOpen(categoryMenuOpen === categoryId ? null : categoryId);
   };
 
-  const handleEditCategory = (category, e) => {
-    e.stopPropagation();
-    setCategoryMenuOpen(null);
-    console.log('Edit category:', category);
-  };
-
   const handleDeleteCategory = (category, e) => {
     e.stopPropagation();
     setCategoryMenuOpen(null);
-    console.log('Delete category:', category);
+    setDeleteModal({
+      isOpen: true,
+      item: category,
+      type: 'category'
+    });
   };
 
-  const handleConfigureCategory = (category, e) => {
+  // Product Menu Handlers
+  const handleProductMenuClick = (productId, e) => {
     e.stopPropagation();
-    setCategoryMenuOpen(null);
-    console.log('Configure category:', category);
+    setProductMenuOpen(productMenuOpen === productId ? null : productId);
+  };
+
+  const handleDuplicateProduct = (product, e) => {
+    e.stopPropagation();
+    setProductMenuOpen(null);
+    setDuplicateModal({
+      isOpen: true,
+      product: product
+    });
+  };
+
+  const handleDeleteProduct = (product, e) => {
+    e.stopPropagation();
+    setProductMenuOpen(null);
+    setDeleteModal({
+      isOpen: true,
+      item: product,
+      type: 'product'
+    });
+  };
+
+  const handleMoveProduct = (product, e) => {
+    e.stopPropagation();
+    setProductMenuOpen(null);
+    setMoveModal({
+      isOpen: true,
+      product: product
+    });
+  };
+
+  // Modal action handlers
+  const handleConfirmDelete = async () => {
+    const { item, type } = deleteModal;
+    const loadingKey = `delete-${type}-${item.id}`;
+    setOperationLoading(loadingKey);
+    
+    try {
+      const authToken = await getAuthToken();
+      
+      if (type === 'category') {
+        const result = await deleteCategory(item.id, authToken);
+        if (result.success) {
+          if (onDataUpdate) onDataUpdate();
+        } else {
+          setError(result.error || 'Failed to delete category');
+        }
+      } else if (type === 'product') {
+        const result = await deleteProduct(item.id, authToken);
+        if (result.success) {
+          loadProducts();
+        } else {
+          setError(result.error || 'Failed to delete product');
+        }
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      setError(error.message);
+    }
+    
+    setOperationLoading(null);
+    setDeleteModal({ isOpen: false, item: null, type: null });
+  };
+
+  const handleConfirmDuplicate = async (options) => {
+    const { product } = duplicateModal;
+    setOperationLoading(`duplicate-${product.id}`);
+    
+    try {
+      const authToken = await getAuthToken();
+      const result = await duplicateProduct(product.id, authToken);
+      
+      if (result.success) {
+        loadProducts();
+      } else {
+        setError(result.error || 'Failed to duplicate product');
+      }
+    } catch (error) {
+      console.error('Duplicate error:', error);
+      setError(error.message);
+    }
+    
+    setOperationLoading(null);
+    setDuplicateModal({ isOpen: false, product: null });
+  };
+
+  const handleConfirmMove = async (options) => {
+    const { product } = moveModal;
+    setOperationLoading(`move-${product.id}`);
+    
+    try {
+      const authToken = await getAuthToken();
+      const result = await updateProduct(product.id, { 
+        categories: options.categoryId ? [{ id: parseInt(options.categoryId) }] : []
+      }, authToken);
+      
+      if (result.success) {
+        loadProducts();
+      } else {
+        setError(result.error || 'Failed to move product');
+      }
+    } catch (error) {
+      console.error('Move error:', error);
+      setError(error.message);
+    }
+    
+    setOperationLoading(null);
+    setMoveModal({ isOpen: false, product: null });
   };
 
   const getDisplayData = () => {
@@ -189,7 +310,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <h2 className="text-xl lg:text-2xl font-semibold text-gray-800 dark:text-gray-200">
-            Categories ({userData?.metadata?.categories?.length + (userData?.availableCategories?.includes('uncategorized') ? 1 : 0)})
+            Categories ({userData?.metadata?.categories?.length + (userData?.availableCategories?.includes('uncategorized') ? 1 : 0) || 0})
           </h2>
           
           <div className="flex items-center gap-2">
@@ -203,34 +324,34 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search Section */}
         <div className="mb-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Search categories or products..."
+              placeholder={searchMode === 'categories' ? 'Search categories...' : 'Search all products...'}
               value={searchTerm}
               onChange={(e) => handleSearch(e.target.value)}
-              className="w-full pl-10 pr-10 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-10 py-3 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
             {searchTerm && (
               <button
                 onClick={() => handleSearch('')}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             )}
           </div>
           
+          {/* Search Mode Toggle */}
           {!searchTerm && (
-            <div className="flex items-center gap-2 mt-3">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Search in:</span>
+            <div className="flex items-center justify-between mt-4">
               <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                 <button
                   onClick={() => setSearchMode('categories')}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     searchMode === 'categories'
                       ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
                       : 'text-gray-600 dark:text-gray-300'
@@ -240,7 +361,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
                 </button>
                 <button
                   onClick={() => setSearchMode('all-products')}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     searchMode === 'all-products'
                       ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
                       : 'text-gray-600 dark:text-gray-300'
@@ -284,26 +405,17 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
                       <button
                         onClick={(e) => handleCategoryMenuClick(category.id, e)}
                         className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                        disabled={operationLoading === `delete-category-${category.id}`}
                       >
-                        <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                        {operationLoading === `delete-category-${category.id}` ? (
+                          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                        )}
                       </button>
                       
                       {categoryMenuOpen === category.id && (
                         <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50">
-                          <button
-                            onClick={(e) => handleEditCategory(category, e)}
-                            className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                          >
-                            <Edit className="w-4 h-4 mr-2" />
-                            Edit Category
-                          </button>
-                          <button
-                            onClick={(e) => handleConfigureCategory(category, e)}
-                            className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                          >
-                            <Settings className="w-4 h-4 mr-2" />
-                            Configure
-                          </button>
                           <button
                             onClick={(e) => handleDeleteCategory(category, e)}
                             className="w-full flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
@@ -326,6 +438,12 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
                 key={`search-${product.id}-${index}`}
                 product={product}
                 onProductSelect={handleProductClick}
+                onProductMenuClick={handleProductMenuClick}
+                productMenuOpen={productMenuOpen}
+                onDuplicateProduct={handleDuplicateProduct}
+                onDeleteProduct={handleDeleteProduct}
+                onMoveProduct={handleMoveProduct}
+                operationLoading={operationLoading}
                 viewMode="grid"
               />
             ))}
@@ -427,44 +545,38 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
       {/* Search */}
       <div className="mb-6">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
             placeholder="Search products..."
             value={searchTerm}
             onChange={(e) => handleSearch(e.target.value)}
-            className="w-full pl-10 pr-10 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-10 pr-10 py-3 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           />
           {searchTerm && (
             <button
               onClick={() => handleSearch('')}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           )}
         </div>
-        
-        {searchTerm && (
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-            <span className="font-medium">{displayData.length}</span> products found
-          </p>
-        )}
       </div>
 
       {/* Child Categories */}
       {!searchTerm && childCategories.length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Categories</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="mb-6">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Subcategories</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {childCategories.map((childCategory) => (
               <div
                 key={childCategory.id}
                 onClick={() => onCategorySelect({ name: childCategory.name, key: `category-${childCategory.id}` })}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600 transition-all group"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md transition-all group"
               >
                 <div className="flex items-center">
-                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mr-3 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/40 transition-colors">
+                  <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mr-3 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/40 transition-colors">
                     <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
                     </svg>
@@ -498,6 +610,12 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
             key={product.id}
             product={product}
             onProductSelect={handleProductClick}
+            onProductMenuClick={handleProductMenuClick}
+            productMenuOpen={productMenuOpen}
+            onDuplicateProduct={handleDuplicateProduct}
+            onDeleteProduct={handleDeleteProduct}
+                            onMoveProduct={handleMoveProduct}
+            operationLoading={operationLoading}
             viewMode={viewMode}
           />
         ))}
@@ -525,90 +643,222 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
           <p className="text-red-600">{error}</p>
         </div>
       )}
+
+      {/* Action Modals */}
+      <DeleteConfirmModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, item: null, type: null })}
+        onConfirm={handleConfirmDelete}
+        title={deleteModal.type === 'category' ? 'Delete Category' : 'Delete Product'}
+        message={deleteModal.item ? `Are you sure you want to delete "${deleteModal.item.name}"? This action cannot be undone.` : ''}
+        loading={operationLoading?.includes('delete')}
+      />
+
+      <DuplicateProductModal
+        isOpen={duplicateModal.isOpen}
+        onClose={() => setDuplicateModal({ isOpen: false, product: null })}
+        onConfirm={handleConfirmDuplicate}
+        product={duplicateModal.product}
+        loading={operationLoading?.includes('duplicate')}
+      />
+
+      <MoveProductModal
+        isOpen={moveModal.isOpen}
+        onClose={() => setMoveModal({ isOpen: false, product: null })}
+        onConfirm={handleConfirmMove}
+        product={moveModal.product}
+        categories={userData?.metadata?.categories || []}
+        loading={operationLoading?.includes('move')}
+      />
     </div>
   );
 };
 
-// Product Card Component
-
-const ProductCard = ({ product, onProductSelect, viewMode }) => {
-  console.log('Product data:', product); // Add this line
+// Product Card Component with Three-Dot Menu
+const ProductCard = ({ 
+  product, 
+  onProductSelect, 
+  onProductMenuClick,
+  productMenuOpen,
+  onDuplicateProduct,
+  onDeleteProduct,
+  onMoveProduct,
+  operationLoading,
+  viewMode 
+}) => {
   
   if (viewMode === 'list') {
-    // rest of code...
     return (
-      <div
-        onClick={() => onProductSelect(product)}
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md transition-all flex items-center space-x-4"
-      >
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-all flex items-center space-x-4">
         <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg flex-shrink-0 overflow-hidden">
           {product.images?.[0] ? (
-            <img
-              src={product.images[0].src}
+            <img 
+              src={product.images[0].src} 
               alt={product.name}
               className="w-full h-full object-cover"
-              onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.nextSibling.style.display = 'flex';
-              }}
             />
-          ) : null}
-          <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500" style={{ display: product.images?.[0] ? 'none' : 'flex' }}>
-            <Image className="w-6 h-6" />
-          </div>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Image className="w-6 h-6 text-gray-400" />
+            </div>
+          )}
         </div>
         
-        <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate mb-1">
-            {product.name}
-          </h3>
-          {product._categoryName && (
-            <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">
-              {product._categoryName}
-            </p>
-          )}
-          <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-            {product.type === 'variable' ? 'Variable Product' : `$${product.regular_price || product.price || '0.00'}`}
+        <div 
+          onClick={() => onProductSelect(product)}
+          className="flex-1 min-w-0 cursor-pointer"
+        >
+          <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate">{product.name}</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+            {product.sku && `SKU: ${product.sku} • `}
+            ${product.price || '0.00'}
           </p>
+          <div className="flex items-center mt-1">
+            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+              product.status === 'publish' 
+                ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+            }`}>
+              {product.status}
+            </span>
+            {product._categoryName && (
+              <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                in {product._categoryName}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="relative">
+          <button
+            onClick={(e) => onProductMenuClick(product.id, e)}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            disabled={operationLoading?.includes(product.id.toString())}
+          >
+            {operationLoading?.includes(product.id.toString()) ? (
+              <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <MoreHorizontal className="w-4 h-4 text-gray-400" />
+            )}
+          </button>
+          
+          {productMenuOpen === product.id && (
+            <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50">
+              <button
+                onClick={(e) => onDuplicateProduct(product, e)}
+                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Duplicate
+              </button>
+              <button
+                onClick={(e) => onMoveProduct(product, e)}
+                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+              >
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Move
+              </button>
+              <button
+                onClick={(e) => onDeleteProduct(product, e)}
+                className="w-full flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
-  // Grid view (default)
+  // Grid view
   return (
-    <div
-      onClick={() => onProductSelect(product)}
-      className="group bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden cursor-pointer hover:shadow-md transition-all hover:translate-y-[-2px]"
-    >
-      <div className="relative aspect-square bg-gray-100 dark:bg-gray-700">
-        {product.images?.[0] ? (
-          <img
-            src={product.images[0].src}
-            alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-            onError={(e) => {
-              e.target.style.display = 'none';
-              e.target.nextSibling.style.display = 'flex';
-            }}
-          />
-        ) : null}
-        <div className="absolute inset-0 flex items-center justify-center text-gray-400 dark:text-gray-500" style={{ display: product.images?.[0] ? 'none' : 'flex' }}>
-          <Image className="w-12 h-12" />
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-all group">
+      <div className="relative">
+        <div 
+          onClick={() => onProductSelect(product)}
+          className="aspect-square bg-gray-100 dark:bg-gray-700 cursor-pointer overflow-hidden"
+        >
+          {product.images?.[0] ? (
+            <img 
+              src={product.images[0].src} 
+              alt={product.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Image className="w-12 h-12 text-gray-400" />
+            </div>
+          )}
         </div>
+        
+        <button
+          onClick={(e) => onProductMenuClick(product.id, e)}
+          className="absolute top-2 right-2 p-1.5 bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 rounded-lg shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+          disabled={operationLoading?.includes(product.id.toString())}
+        >
+          {operationLoading?.includes(product.id.toString()) ? (
+            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <MoreHorizontal className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+          )}
+        </button>
+        
+        {productMenuOpen === product.id && (
+          <div className="absolute top-12 right-2 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-10">
+            <button
+              onClick={(e) => onDuplicateProduct(product, e)}
+              className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+            >
+              <Copy className="w-4 h-4 mr-2" />
+              Duplicate
+            </button>
+            <button
+              onClick={(e) => onMoveProduct(product, e)}
+              className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+            >
+              <FolderOpen className="w-4 h-4 mr-2" />
+              Move
+            </button>
+            <button
+              onClick={(e) => onDeleteProduct(product, e)}
+              className="w-full flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </button>
+          </div>
+        )}
       </div>
-      <div className="p-3">
-        <h3 className="font-medium text-gray-900 dark:text-gray-100 text-sm leading-tight line-clamp-2 mb-1">
-          {product.name}
-        </h3>
+      
+      <div 
+        onClick={() => onProductSelect(product)}
+        className="p-4 cursor-pointer"
+      >
+        <h3 className="font-medium text-gray-900 dark:text-gray-100 text-sm mb-1 line-clamp-2">{product.name}</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+          ${product.price || '0.00'}
+        </p>
+        <div className="flex items-center justify-between">
+          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+            product.status === 'publish' 
+              ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+              : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+          }`}>
+            {product.status}
+          </span>
+          {product.sku && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {product.sku}
+            </span>
+          )}
+        </div>
         {product._categoryName && (
-          <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">
-            {product._categoryName}
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            in {product._categoryName}
           </p>
         )}
-        <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-          {product.type === 'variable' ? 'Variable Product' : `$${product.regular_price || product.price || '0.00'}`}
-        </p>
       </div>
     </div>
   );

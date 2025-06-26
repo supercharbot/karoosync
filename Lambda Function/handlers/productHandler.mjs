@@ -296,6 +296,38 @@ async function deleteCategoryInWooCommerce(url, username, appPassword, categoryI
     return makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/categories/${categoryId}`, auth, { force: true }, 'DELETE');
 }
 
+async function duplicateProductInWooCommerce(url, username, appPassword, productId) {
+    const baseUrl = url.startsWith('http') ? url : `https://${url}`;
+    const auth = Buffer.from(`${username}:${appPassword}`).toString('base64');
+    
+    // First get the original product
+    const originalProduct = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/${productId}`, auth);
+    
+    // Create duplicate with modified name
+    const duplicateData = {
+        ...originalProduct,
+        name: `${originalProduct.name} - Copy`,
+        slug: '',  // Let WooCommerce generate new slug
+        sku: originalProduct.sku ? `${originalProduct.sku}-copy` : '',
+        status: 'draft'  // Start as draft
+    };
+    
+    // Remove fields that shouldn't be duplicated
+    delete duplicateData.id;
+    delete duplicateData.permalink;
+    delete duplicateData.date_created;
+    delete duplicateData.date_modified;
+    
+    return makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {}, 'POST', duplicateData);
+}
+
+async function deleteProductInWooCommerce(url, username, appPassword, productId) {
+    const baseUrl = url.startsWith('http') ? url : `https://${url}`;
+    const auth = Buffer.from(`${username}:${appPassword}`).toString('base64');
+    
+    return makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/${productId}`, auth, { force: true }, 'DELETE');
+}
+
 async function updateMetadataAfterCategoryChange(userId) {
     try {
         const credentials = await getUserCredentials(userId);
@@ -380,6 +412,104 @@ export async function handleProduct(event, userId) {
             
         } catch (error) {
             console.error('Category creation error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    success: false,
+                    error: error.message
+                })
+            };
+        }
+    }
+
+    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'duplicate-product') {
+        console.log('📋 Duplicate product request received');
+        
+        let requestData;
+        try {
+            requestData = JSON.parse(event.body || '{}');
+        } catch (parseError) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Invalid JSON in request body' })
+            };
+        }
+        
+        const { productId } = requestData;
+        
+        if (!productId) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Product ID required' })
+            };
+        }
+
+        try {
+            const credentials = await getUserCredentials(userId);
+            
+            const duplicatedProduct = await duplicateProductInWooCommerce(
+                credentials.url,
+                credentials.username,
+                credentials.appPassword,
+                productId
+            );
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    success: true,
+                    product: duplicatedProduct
+                })
+            };
+            
+        } catch (error) {
+            console.error('Product duplication error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    success: false,
+                    error: error.message
+                })
+            };
+        }
+    }
+
+    if (event.httpMethod === 'DELETE' && event.queryStringParameters?.action === 'delete-product') {
+        console.log('🗑️ Delete product request received');
+        
+        const productId = event.queryStringParameters?.productId;
+        
+        if (!productId) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Product ID required' })
+            };
+        }
+
+        try {
+            const credentials = await getUserCredentials(userId);
+            
+            await deleteProductInWooCommerce(
+                credentials.url,
+                credentials.username,
+                credentials.appPassword,
+                productId
+            );
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: true })
+            };
+            
+        } catch (error) {
+            console.error('Product deletion error:', error);
             return {
                 statusCode: 500,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },

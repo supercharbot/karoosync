@@ -406,3 +406,26 @@ export async function getHealthStatus() {
     return { success: false, error: error.message };
   }
 }
+
+export async function duplicateProduct(productId, authToken) {
+  console.log(`📋 Duplicating product: ${productId}`);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=duplicate-product`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ productId })
+  });
+
+  return result;
+}
+
+export async function deleteProduct(productId, authToken) {
+  console.log(`🗑️ Deleting product: ${productId}`);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=delete-product&productId=${productId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}

@@ -106,7 +106,9 @@ export const handler = async (event) => {
         // Product operations: PUT requests and category management
         if (event.httpMethod === 'PUT' ||
             (event.httpMethod === 'POST' && action === 'create-category') ||
-            (event.httpMethod === 'DELETE' && action === 'delete-category')) {
+            (event.httpMethod === 'POST' && action === 'duplicate-product') ||
+            (event.httpMethod === 'DELETE' && action === 'delete-category') ||
+            (event.httpMethod === 'DELETE' && action === 'delete-product')) {
             console.log('🛍️ Routing to Product handler');
             return await handleProduct(event, userId);
         }
