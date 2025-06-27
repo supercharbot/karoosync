@@ -665,7 +665,6 @@ const ProductCard = ({
   operationLoading,
   viewMode 
 }) => {
-  console.log('Product data:', product); // Add this line
   
   if (viewMode === 'list') {
     // rest of code...
