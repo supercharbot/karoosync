@@ -52,6 +52,13 @@ const ParentProduct = ({ product, onBack, onProductUpdate }) => {
     reviews_allowed: product.reviews_allowed !== false,
     purchase_note: product.purchase_note || '',
     menu_order: product.menu_order || 0,
+    low_stock_amount: product.low_stock_amount || '',
+    tax_status: product.tax_status || 'taxable',
+    tax_class: product.tax_class || '',
+    default_attributes: product.default_attributes || [],
+    grouped_products: product.grouped_products || [],
+    upsell_ids: product.upsell_ids || [],
+    cross_sell_ids: product.cross_sell_ids || [],
     
     // Downloadable
     downloads: product.downloads || [],

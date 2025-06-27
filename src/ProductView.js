@@ -57,6 +57,12 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
     reviews_allowed: product.reviews_allowed !== false,
     purchase_note: product.purchase_note || '',
     menu_order: product.menu_order || 0,
+    low_stock_amount: product.low_stock_amount || '',
+    tax_status: product.tax_status || 'taxable',
+    tax_class: product.tax_class || '',
+    grouped_products: product.grouped_products || [],
+    upsell_ids: product.upsell_ids || [],
+    cross_sell_ids: product.cross_sell_ids || [],
     
     // Downloadable
     downloads: product.downloads || [],
@@ -208,7 +214,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
       <div className="hidden lg:flex flex-1">
         {/* Left Panel - Product Preview (Desktop) */}
         <div className="w-1/2 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-          <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} />
+          <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} product={product} />
         </div>
 
         {/* Right Panel - Editor (Desktop) */}
@@ -260,7 +266,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
             <div className="border-b border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Product Preview</h2>
             </div>
-            <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} isMobile={true} />
+            <ProductPreview editData={editData} activeImageIndex={activeImageIndex} navigateImage={navigateImage} product={product} isMobile={true} />
           </div>
         ) : (
           <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
@@ -375,7 +381,7 @@ const ProductEditor = ({
 };
 
 // Product Preview Component
-const ProductPreview = ({ editData, activeImageIndex, navigateImage, isMobile = false }) => (
+const ProductPreview = ({ editData, activeImageIndex, navigateImage, product, isMobile = false }) => (
   <div className={`${isMobile ? 'p-4' : 'p-8'}`}>
     <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
       {/* Image Gallery */}
@@ -460,6 +466,24 @@ const ProductPreview = ({ editData, activeImageIndex, navigateImage, isMobile = 
           </p>
           <p className="text-sm text-gray-600 dark:text-gray-400">
             <span className="font-medium">Type:</span> {editData.type}
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            <span className="font-medium">Created:</span> {product.date_created ? new Date(product.date_created).toLocaleDateString() : 'N/A'}
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            <span className="font-medium">Modified:</span> {product.date_modified ? new Date(product.date_modified).toLocaleDateString() : 'N/A'}
+          </p>
+          {product.permalink && (
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">View:</span> 
+              <a href={product.permalink} target="_blank" rel="noopener noreferrer" 
+                 className="ml-1 text-blue-600 dark:text-blue-400 hover:underline">
+                Live Product
+              </a>
+            </p>
+          )}
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            <span className="font-medium">Rating:</span> {product.average_rating || '0'} ({product.rating_count || 0} reviews)
           </p>
         </div>
       </div>

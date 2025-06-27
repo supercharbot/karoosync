@@ -553,6 +553,15 @@ function normalizeProduct(product) {
         // Parent ID for variations
         ...(product.parent_id && { parent_id: product.parent_id }),
         
+        // NEW: Additional WooCommerce fields
+        permalink: product.permalink || '',
+        tax_status: product.tax_status || 'taxable',
+        default_attributes: product.default_attributes || [],
+        grouped_products: product.grouped_products || [],
+        upsell_ids: product.upsell_ids || [],
+        cross_sell_ids: product.cross_sell_ids || [],
+        meta_data: product.meta_data || [],
+        
         // Pricing
         regular_price: product.regular_price || '',
         sale_price: product.sale_price || '',
