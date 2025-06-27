@@ -245,165 +245,173 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
                             <span>Price: ${variation.sale_price || variation.regular_price || '0'}</span>
                             <span>SKU: {variation.sku || 'N/A'}</span>
                             <span>Created: {variation.date_created ? new Date(variation.date_created).toLocaleDateString() : 'N/A'}</span>
-                            <span className={`px-2 py-0.5 rounded text-xs ${
-                              variation.stock_status === 'instock' 
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                                : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                            }`}>
-                              {variation.stock_status || 'instock'}
-                            </span>
+                            <span>Modified: {variation.date_modified ? new Date(variation.date_modified).toLocaleDateString() : 'N/A'}</span>
                           </div>
+                          {variation.permalink && (
+                            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                              <a href={variation.permalink} target="_blank" rel="noopener noreferrer" 
+                                 className="text-blue-600 dark:text-blue-400 hover:underline">
+                                View Live Variation
+                              </a>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        {expandedVariation === variation.id ? (
-                          <ChevronUp className="w-5 h-5 text-gray-400" />
-                        ) : (
+                      <div className="flex items-center space-x-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          variation.status === 'publish' 
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                        }`}>
+                          {variation.status === 'publish' ? 'Active' : 'Draft'}
+                        </span>
+                        {expandedVariation === variation.id ? 
+                          <ChevronUp className="w-5 h-5 text-gray-400" /> : 
                           <ChevronDown className="w-5 h-5 text-gray-400" />
-                        )}
+                        }
                       </div>
                     </div>
 
-                    {/* Expanded Variation Form */}
+                    {/* Expanded Variation Details */}
                     {expandedVariation === variation.id && (
-                      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                        
-                        {/* Pricing */}
+                      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {/* Image */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Regular Price
-                          </label>
-                          <div className="relative">
-                            <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={variation.regular_price || ''}
-                              onChange={(e) => handleVariationChange(variation.id, 'regular_price', e.target.value)}
-                              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                              placeholder="0.00"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Sale Price
-                          </label>
-                          <div className="relative">
-                            <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={variation.sale_price || ''}
-                              onChange={(e) => handleVariationChange(variation.id, 'sale_price', e.target.value)}
-                              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                              placeholder="0.00"
-                            />
-                          </div>
-                        </div>
-
-                        {/* SKU */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            SKU
-                          </label>
-                          <div className="relative">
-                            <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                              type="text"
-                              value={variation.sku || ''}
-                              onChange={(e) => handleVariationChange(variation.id, 'sku', e.target.value)}
-                              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                              placeholder="VAR-SKU"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Stock Status */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Stock Status
-                          </label>
-                          <select
-                            value={variation.stock_status || 'instock'}
-                            onChange={(e) => handleVariationChange(variation.id, 'stock_status', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="instock">In Stock</option>
-                            <option value="outofstock">Out of Stock</option>
-                            <option value="onbackorder">On Backorder</option>
-                          </select>
-                        </div>
-
-                        {/* Weight */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Weight
-                          </label>
-                          <div className="relative">
-                            <Ruler className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                              type="text"
-                              value={variation.weight || ''}
-                              onChange={(e) => handleVariationChange(variation.id, 'weight', e.target.value)}
-                              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                              placeholder="0"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Stock Quantity */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Stock Quantity
-                          </label>
-                          <input
-                            type="number"
-                            value={variation.stock_quantity || ''}
-                            onChange={(e) => handleVariationChange(variation.id, 'stock_quantity', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                            placeholder="0"
-                          />
-                        </div>
-
-                        {/* Variation Image */}
-                        <div className="md:col-span-2">
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Variation Image
                           </label>
-                          <div className="flex items-center space-x-4">
-                            {variation.image?.src ? (
-                              <div className="relative">
-                                <img
-                                  src={variation.image.src}
-                                  alt="Variation"
-                                  className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-gray-600"
-                                />
-                                <button
-                                  onClick={() => handleVariationImageDelete(variation.id)}
-                                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
+                          {variation.image ? (
+                            <div className="relative aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden">
+                              <img
+                                src={variation.image.src}
+                                alt={variation.image.alt}
+                                className="w-full h-full object-cover"
+                              />
+                              <button
+                                onClick={() => handleVariationImageDelete(variation.id)}
+                                className="absolute top-2 right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
+                              <div className="text-center">
+                                <Image className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                <p className="text-xs text-gray-500 dark:text-gray-400">No image</p>
                               </div>
-                            ) : (
-                              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 flex items-center justify-center">
-                                <Image className="w-6 h-6 text-gray-400" />
-                              </div>
-                            )}
-                            <div className="flex-1">
+                            </div>
+                          )}
+                          <div className="mt-2 flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Image URL"
+                              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-xs focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleVariationImageAdd(variation.id, e.target.value);
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Pricing */}
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Regular Price
+                            </label>
+                            <div className="relative">
+                              <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              <input
+                                type="number"
+                                value={variation.regular_price || ''}
+                                onChange={(e) => handleVariationChange(variation.id, 'regular_price', e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Sale Price
+                            </label>
+                            <div className="relative">
+                              <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              <input
+                                type="number"
+                                value={variation.sale_price || ''}
+                                onChange={(e) => handleVariationChange(variation.id, 'sale_price', e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Inventory */}
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              SKU
+                            </label>
+                            <div className="relative">
+                              <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                               <input
                                 type="text"
-                                placeholder="Enter image URL"
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                onKeyPress={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleVariationImageAdd(variation.id, e.target.value);
-                                    e.target.value = '';
-                                  }
-                                }}
+                                value={variation.sku || ''}
+                                onChange={(e) => handleVariationChange(variation.id, 'sku', e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                placeholder="variation-sku"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Stock Quantity
+                            </label>
+                            <input
+                              type="number"
+                              value={variation.stock_quantity || ''}
+                              onChange={(e) => handleVariationChange(variation.id, 'stock_quantity', parseInt(e.target.value) || 0)}
+                              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              placeholder="0"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Stock Status
+                            </label>
+                            <select
+                              value={variation.stock_status || 'instock'}
+                              onChange={(e) => handleVariationChange(variation.id, 'stock_status', e.target.value)}
+                              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                            >
+                              <option value="instock">In Stock</option>
+                              <option value="outofstock">Out of Stock</option>
+                              <option value="onbackorder">On Backorder</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Weight & Dimensions */}
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Weight
+                            </label>
+                            <div className="relative">
+                              <Ruler className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              <input
+                                type="text"
+                                value={variation.weight || ''}
+                                onChange={(e) => handleVariationChange(variation.id, 'weight', e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                placeholder="0"
                               />
                             </div>
                           </div>
@@ -451,72 +459,32 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
                                 placeholder="Height"
                               />
                             </div>
-
-                            {/* Tax & Meta Fields */}
-                            <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Tax Status
-                                  </label>
-                                  <select
-                                    value={variation.tax_status || 'taxable'}
-                                    onChange={(e) => handleVariationChange(variation.id, 'tax_status', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                  >
-                                    <option value="taxable">Taxable</option>
-                                    <option value="shipping">Shipping only</option>
-                                    <option value="none">None</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Menu Order
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={variation.menu_order || 0}
-                                    onChange={(e) => handleVariationChange(variation.id, 'menu_order', parseInt(e.target.value) || 0)}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                  />
-                                </div>
-                              </div>
-                              
-                              {variation.permalink && (
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Permalink
-                                  </label>
-                                  <a href={variation.permalink} target="_blank" rel="noopener noreferrer" 
-                                     className="text-blue-600 dark:text-blue-400 hover:underline text-sm block truncate">
-                                    {variation.permalink}
-                                  </a>
-                                </div>
-                              )}
-
-                              {variation.meta_data && variation.meta_data.length > 0 && (
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Custom Meta ({variation.meta_data.length} fields)
-                                  </label>
-                                  <div className="bg-gray-50 dark:bg-gray-600 p-3 rounded text-xs max-h-32 overflow-y-auto">
-                                    {variation.meta_data.slice(0, 3).map((meta, index) => (
-                                      <div key={index} className="mb-1">
-                                        <span className="font-medium">{meta.key}:</span> 
-                                        <span className="ml-1 text-gray-600 dark:text-gray-300">
-                                          {String(meta.value).substring(0, 30)}...
-                                        </span>
-                                      </div>
-                                    ))}
-                                    {variation.meta_data.length > 3 && (
-                                      <div className="text-xs text-gray-500">...{variation.meta_data.length - 3} more</div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
                           </div>
                         </div>
+
+                        {/* Meta Data Display */}
+                        {variation.meta_data && variation.meta_data.length > 0 && (
+                          <div className="md:col-span-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Custom Meta ({variation.meta_data.length} fields)
+                              </label>
+                              <div className="bg-gray-50 dark:bg-gray-600 p-3 rounded text-xs max-h-32 overflow-y-auto">
+                                {variation.meta_data.slice(0, 3).map((meta, index) => (
+                                  <div key={index} className="mb-1">
+                                    <span className="font-medium">{meta.key}:</span> 
+                                    <span className="ml-1 text-gray-600 dark:text-gray-300">
+                                      {String(meta.value).substring(0, 30)}...
+                                    </span>
+                                  </div>
+                                ))}
+                                {variation.meta_data.length > 3 && (
+                                  <div className="text-xs text-gray-500">...{variation.meta_data.length - 3} more</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

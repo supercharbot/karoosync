@@ -55,10 +55,13 @@ const ParentProduct = ({ product, onBack, onProductUpdate }) => {
     low_stock_amount: product.low_stock_amount || '',
     tax_status: product.tax_status || 'taxable',
     tax_class: product.tax_class || '',
+    attributes: product.attributes || [],
     default_attributes: product.default_attributes || [],
     grouped_products: product.grouped_products || [],
     upsell_ids: product.upsell_ids || [],
     cross_sell_ids: product.cross_sell_ids || [],
+    parent_id: product.parent_id || 0,
+    meta_data: product.meta_data || [],
     
     // Downloadable
     downloads: product.downloads || [],
@@ -344,13 +347,128 @@ const ParentProduct = ({ product, onBack, onProductUpdate }) => {
               isMobile={false}
             />
 
+            {/* Description Sections */}
+            <DescriptionSections 
+              editData={editData}
+              handleInputChange={handleInputChange}
+            />
+
             {/* Advanced Settings */}
-            <AdvancedSettings 
+            <AdvancedSettingsSection 
               editData={editData}
               handleInputChange={handleInputChange}
             />
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// Description Sections Component
+const DescriptionSections = ({ editData, handleInputChange }) => {
+  const [showDescription, setShowDescription] = useState(false);
+  const [showShortDescription, setShowShortDescription] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      {/* Short Description Toggle */}
+      <div className="border border-gray-200 dark:border-gray-700 rounded-lg">
+        <button
+          onClick={() => setShowShortDescription(!showShortDescription)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-left"
+        >
+          <span className="font-medium text-gray-900 dark:text-gray-100">
+            Short Description
+          </span>
+          <svg 
+            className={`w-5 h-5 text-gray-500 dark:text-gray-400 transform transition-transform ${showShortDescription ? 'rotate-180' : ''}`}
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showShortDescription && (
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+            <textarea
+              value={editData.short_description || ''}
+              onChange={(e) => handleInputChange('short_description', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              rows={4}
+              placeholder="Enter short description..."
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Description Toggle */}
+      <div className="border border-gray-200 dark:border-gray-700 rounded-lg">
+        <button
+          onClick={() => setShowDescription(!showDescription)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-left"
+        >
+          <span className="font-medium text-gray-900 dark:text-gray-100">
+            Description
+          </span>
+          <svg 
+            className={`w-5 h-5 text-gray-500 dark:text-gray-400 transform transition-transform ${showDescription ? 'rotate-180' : ''}`}
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showDescription && (
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+            <textarea
+              value={editData.description || ''}
+              onChange={(e) => handleInputChange('description', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              rows={6}
+              placeholder="Enter full description..."
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Advanced Settings Section Component
+const AdvancedSettingsSection = ({ editData, handleInputChange }) => {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      {/* Advanced Toggle */}
+      <div className="border border-gray-200 dark:border-gray-700 rounded-lg">
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-left"
+        >
+          <span className="font-medium text-gray-900 dark:text-gray-100">
+            Advanced Settings
+          </span>
+          <svg 
+            className={`w-5 h-5 text-gray-500 dark:text-gray-400 transform transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showAdvanced && (
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+            <AdvancedSettings 
+              editData={editData}
+              handleInputChange={handleInputChange}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
