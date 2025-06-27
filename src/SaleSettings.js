@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Tag, X, Percent } from 'lucide-react';
 
 const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
-  // Track if user has activated sale mode (separate from having valid sale price)
+  // Track if user has activated sale mode
   const [saleMode, setSaleMode] = useState(() => {
     return !!(editData.sale_price || editData.date_on_sale_from || editData.date_on_sale_to);
   });
@@ -18,6 +18,50 @@ const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
     }
     return '';
   });
+
+  // Format date input with slashes
+  const formatDateInput = (value) => {
+    const digits = value.replace(/\D/g, '');
+    
+    if (digits.length <= 2) {
+      return digits;
+    } else if (digits.length <= 4) {
+      return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    } else {
+      return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+    }
+  };
+
+  // Convert dd/mm/yyyy to ISO format for WooCommerce
+  const convertToISODate = (dateString) => {
+    if (!dateString || dateString.length < 10) return '';
+    
+    const [day, month, year] = dateString.split('/');
+    if (day && month && year && year.length === 4) {
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00`;
+    }
+    return '';
+  };
+
+  // Convert ISO date back to dd/mm/yyyy for display
+  const convertFromISODate = (isoString) => {
+    if (!isoString) return '';
+    
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '';
+    
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    
+    return `${day}/${month}/${year}`;
+  };
+
+  const handleDateChange = (field, value) => {
+    const formattedValue = formatDateInput(value);
+    const isoDate = convertToISODate(formattedValue);
+    handleInputChange(field, isoDate);
+  };
 
   const handlePutOnSale = () => {
     setSaleMode(true);
@@ -138,22 +182,30 @@ const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
                 Sale Start Date
               </label>
               <input
-                type="datetime-local"
-                value={editData.date_on_sale_from}
-                onChange={(e) => handleInputChange('date_on_sale_from', e.target.value)}
+                type="text"
+                autoComplete="off"
+                value={convertFromISODate(editData.date_on_sale_from)}
+                onChange={(e) => handleDateChange('date_on_sale_from', e.target.value)}
                 className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+                placeholder="DD/MM/YYYY"
+                maxLength="10"
               />
+
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Sale End Date
               </label>
               <input
-                type="datetime-local"
-                value={editData.date_on_sale_to}
-                onChange={(e) => handleInputChange('date_on_sale_to', e.target.value)}
+                type="text"
+                autoComplete="off"
+                value={convertFromISODate(editData.date_on_sale_to)}
+                onChange={(e) => handleDateChange('date_on_sale_to', e.target.value)}
                 className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+                placeholder="DD/MM/YYYY"
+                maxLength="10"
               />
+
             </div>
           </div>
         </div>

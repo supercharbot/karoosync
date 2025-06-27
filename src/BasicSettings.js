@@ -173,9 +173,11 @@ const BasicSettings = ({
           />
           <button
             onClick={(e) => {
-              const input = e.target.previousElementSibling;
-              handleImageAdd(input.value);
-              input.value = '';
+              const input = e.target.closest('div').querySelector('input[type="url"]');
+              if (input && input.value) {
+                handleImageAdd(input.value);
+                input.value = '';
+              }
             }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
           >

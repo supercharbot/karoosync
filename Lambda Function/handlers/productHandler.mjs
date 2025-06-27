@@ -78,8 +78,53 @@ async function getUserCredentials(userId) {
     }
 }
 
+async function updateProductInMainS3File(userId, productId, updatedProduct) {
+    try {
+        console.log(`🔄 Updating main products file for product: ${productId}`);
+        
+        const response = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/products.json.gz`
+        }));
+        
+        const compressedData = await response.Body.transformToByteArray();
+        const productsData = JSON.parse(zlib.gunzipSync(compressedData).toString());
+        
+        const numericProductId = parseInt(productId);
+        if (productsData.products && productsData.products[numericProductId]) {
+            productsData.products[numericProductId] = updatedProduct;
+            productsData.lastUpdated = new Date().toISOString();
+            
+            const updatedJson = JSON.stringify(productsData);
+            const compressedUpdated = zlib.gzipSync(updatedJson);
+            
+            await s3Client.send(new PutObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/products.json.gz`,
+                Body: compressedUpdated,
+                ContentType: 'application/json',
+                ContentEncoding: 'gzip'
+            }));
+            
+            console.log(`✅ Updated main products file for product: ${productId}`);
+        } else {
+            console.warn(`⚠️ Product ${productId} not found in main products file`);
+        }
+        
+    } catch (error) {
+        console.error(`❌ Failed to update main products file:`, error);
+        throw error;
+    }
+}
+
 async function updateProductInS3Categories(userId, productId, updatedProduct) {
     try {
+        console.log(`🔄 Starting S3 updates for product: ${productId}`);
+        
+        // 1. Update the main products.json.gz file FIRST
+        await updateProductInMainS3File(userId, productId, updatedProduct);
+        
+        // 2. Update category-specific files
         const numericProductId = parseInt(productId);
         
         const listResponse = await s3Client.send(new ListObjectsV2Command({
@@ -87,7 +132,12 @@ async function updateProductInS3Categories(userId, productId, updatedProduct) {
             Prefix: `users/${userId}/categories/`
         }));
         
-        if (!listResponse.Contents) return;
+        if (!listResponse.Contents) {
+            console.log(`✅ S3 updates completed for product: ${productId} (main file only)`);
+            return;
+        }
+        
+        let categoryUpdates = 0;
         
         for (const object of listResponse.Contents) {
             if (!object.Key.endsWith('.json.gz')) continue;
@@ -120,13 +170,18 @@ async function updateProductInS3Categories(userId, productId, updatedProduct) {
                         ContentType: 'application/json',
                         ContentEncoding: 'gzip'
                     }));
+                categoryUpdates++;
                 }
             } catch (categoryError) {
                 console.error(`Error updating ${object.Key}:`, categoryError);
             }
         }
+        
+        console.log(`✅ S3 updates completed for product: ${productId} (main file + ${categoryUpdates} categories)`);
+        
     } catch (error) {
-        console.error('S3 category update failed:', error);
+        console.error('❌ S3 product update failed:', error);
+        throw error;
     }
 }
 
@@ -156,7 +211,8 @@ async function updateRegularProduct(userId, productId, productData) {
                 .map((image, index) => ({
                     src: image.src,
                     name: image.name || `image-${index + 1}`,
-                    alt: image.alt || processedData.name || 'Product image'
+                    alt: image.alt || processedData.name || 'Product image',
+                    id: image.id || 0
                 }));
         }
         

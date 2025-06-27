@@ -14,6 +14,18 @@ const CORS_HEADERS = {
     'Access-Control-Max-Age': '86400'
 };
 
+// Preserve description formatting
+function preserveDescriptionFormatting(htmlContent) {
+    if (!htmlContent) return '';
+    
+    return htmlContent
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/\n\s*\n/g, '\n\n')
+        .replace(/(\[\/vc_column_text\])(\s*)(\[\/vc_column\])(\s*)(\[\/vc_row\])/g, '$1\n$3\n$5')
+        .replace(/(\[vc_row\])(\s*)(\[vc_column\])(\s*)(\[vc_column_text\])/g, '$1\n$3\n$5');
+}
+
 // Generate UUID for WordPress auth and sync tracking
 const generateUUID = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -568,9 +580,9 @@ function normalizeProduct(product) {
         date_on_sale_from: product.date_on_sale_from || '',
         date_on_sale_to: product.date_on_sale_to || '',
         
-        // Content
-        description: product.description || '',
-        short_description: product.short_description || '',
+        // Content - WITH FORMATTING PRESERVATION
+        description: preserveDescriptionFormatting(product.description || ''),
+        short_description: preserveDescriptionFormatting(product.short_description || ''),
         purchase_note: product.purchase_note || '',
         
         // Taxonomy (as IDs for relationships)
