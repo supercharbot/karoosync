@@ -1,10 +1,594 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { X, Plus } from 'lucide-react';
 
 const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => {
+  // State for input fields
+  const [tagInput, setTagInput] = useState('');
+  const [tagDescription, setTagDescription] = useState('');
+  const [upsellInput, setUpsellInput] = useState('');
+  const [crossSellInput, setCrossSellInput] = useState('');
+  const [attributeInput, setAttributeInput] = useState({
+    name: '',
+    values: '',
+    visible: true
+  });
+
+  // State for existing data selection
+  const [showTagSelector, setShowTagSelector] = useState(false);
+  const [showAttributeSelector, setShowAttributeSelector] = useState(false);
+  const [availableTags, setAvailableTags] = useState([]);
+  const [availableAttributes, setAvailableAttributes] = useState([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+  const [loadingAttributes, setLoadingAttributes] = useState(false);
+
+  // Convert tag IDs to tag objects for display
+  const getTagsForDisplay = () => {
+    // First check if we have a tags array (ProductView.js format)
+    if (editData.tags && Array.isArray(editData.tags) && editData.tags.length > 0) {
+      return editData.tags;
+    }
+    
+    // Fallback: check for tag_ids array (normalized format)
+    if (editData.tag_ids && Array.isArray(editData.tag_ids) && editData.tag_ids.length > 0) {
+      return editData.tag_ids.map(tagId => ({
+        id: tagId,
+        name: `Tag ${tagId}`
+      }));
+    }
+    
+    return [];
+  };
+
+  // Fetch existing tags from WooCommerce
+  const fetchExistingTags = async () => {
+    setLoadingTags(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_ENDPOINT || ''}?action=load-woocommerce-tags`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}` // Adjust based on your auth system
+        }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setAvailableTags(result.tags || []);
+        setShowTagSelector(true);
+      } else {
+        console.error('Failed to fetch tags');
+      }
+    } catch (error) {
+      console.error('Error fetching tags:', error);
+    } finally {
+      setLoadingTags(false);
+    }
+  };
+
+  // Fetch existing attributes from WooCommerce
+  const fetchExistingAttributes = async () => {
+    setLoadingAttributes(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_ENDPOINT || ''}?action=load-woocommerce-attributes`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}` // Adjust based on your auth system
+        }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setAvailableAttributes(result.attributes || []);
+        setShowAttributeSelector(true);
+      } else {
+        console.error('Failed to fetch attributes');
+      }
+    } catch (error) {
+      console.error('Error fetching attributes:', error);
+    } finally {
+      setLoadingAttributes(false);
+    }
+  };
+
+  // Add existing tag to product
+  const addExistingTag = (tag) => {
+    const currentTags = editData.tags || [];
+    const alreadyExists = currentTags.find(t => t.id === tag.id);
+    
+    if (!alreadyExists) {
+      const newTags = [...currentTags, tag];
+      handleInputChange('tags', newTags);
+    }
+    
+    setShowTagSelector(false);
+  };
+
+  // Add existing attribute to product
+  const addExistingAttribute = (attribute) => {
+    const currentAttributes = editData.attributes || [];
+    const alreadyExists = currentAttributes.find(a => a.id === attribute.id || a.name === attribute.name);
+    
+    if (!alreadyExists) {
+      const newAttributes = [...currentAttributes, {
+        id: attribute.id,
+        name: attribute.name,
+        slug: attribute.slug,
+        options: [], // Will be populated when user adds options
+        visible: true
+      }];
+      handleInputChange('attributes', newAttributes);
+    }
+    
+    setShowAttributeSelector(false);
+  };
+
+  // Add tag by name (simplified - works with existing tags array)
+  const addTag = (tagName, tagDesc) => {
+    if (!tagName.trim() || !tagDesc.trim()) return;
+    
+    // Check if tag already exists
+    const currentTags = editData.tags || [];
+    const existingTag = currentTags.find(tag => 
+      tag.name && tag.name.toLowerCase() === tagName.trim().toLowerCase()
+    );
+    
+    if (existingTag) {
+      return; // Tag already exists
+    }
+    
+    // Create new tag with temporary ID
+    const tempId = Date.now();
+    const newTag = { 
+      id: tempId, 
+      name: tagName.trim(),
+      description: tagDesc.trim()
+    };
+    
+    const newTags = [...currentTags, newTag];
+    handleInputChange('tags', newTags);
+    
+    setTagInput('');
+    setTagDescription('');
+  };
+
+  // Remove tag
+  const removeTag = (tagId) => {
+    const currentTags = editData.tags || [];
+    const newTags = currentTags.filter(tag => tag.id !== tagId);
+    handleInputChange('tags', newTags);
+  };
+
+  const addAttribute = () => {
+    if (!attributeInput.name || !attributeInput.values) return;
+    
+    const newAttribute = {
+      name: attributeInput.name,
+      options: attributeInput.values.split('|').map(v => v.trim()).filter(v => v),
+      visible: attributeInput.visible
+    };
+    
+    const newAttributes = [...(editData.attributes || []), newAttribute];
+    handleInputChange('attributes', newAttributes);
+    
+    setAttributeInput({
+      name: '',
+      values: '',
+      visible: true
+    });
+  };
+
   return (
     <div className={`${isMobile ? 'space-y-4' : 'space-y-6'}`}>
-      {/* Advanced Product Settings */}
-      <div className={`${isMobile ? 'space-y-3 w-full max-w-full' : 'space-y-4'}`}>
+      
+      {/* Tags & Attributes Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Tags & Attributes</h3>
+        
+        {/* Tags */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tags</label>
+          
+          {/* Action Buttons */}
+          <div className="flex gap-2 mb-3">
+            <button
+              onClick={fetchExistingTags}
+              disabled={loadingTags}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
+            >
+              {loadingTags ? 'Loading...' : 'Choose Existing Tag'}
+            </button>
+            <span className="text-gray-400 self-center">or</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400 self-center">create new below</span>
+          </div>
+
+          {/* Existing Tag Selector */}
+          {showTagSelector && (
+            <div className="border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-blue-50 dark:bg-blue-900/20 mb-3">
+              <div className="flex justify-between items-center mb-2">
+                <h5 className="text-sm font-medium text-gray-900 dark:text-gray-100">Select Existing Tag</h5>
+                <button
+                  onClick={() => setShowTagSelector(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {availableTags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    onClick={() => addExistingTag(tag)}
+                    className="w-full text-left px-3 py-2 rounded hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors"
+                  >
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{tag.name}</div>
+                    {tag.description && (
+                      <div className="text-sm text-gray-600 dark:text-gray-300">{tag.description}</div>
+                    )}
+                  </button>
+                ))}
+                {availableTags.length === 0 && (
+                  <div className="text-sm text-gray-500 dark:text-gray-400 p-2">No existing tags found</div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Add New Tag Form */}
+          <div className="border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 mb-3">
+            <h5 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Add New Tag</h5>
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+                placeholder="Tag name..."
+              />
+              <textarea
+                value={tagDescription}
+                onChange={(e) => setTagDescription(e.target.value)}
+                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+                placeholder="Tag description..."
+                rows="2"
+              />
+              <button
+                onClick={() => addTag(tagInput.trim(), tagDescription.trim())}
+                disabled={!tagInput.trim() || !tagDescription.trim()}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Add Tag
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex flex-wrap gap-2">
+            {getTagsForDisplay().map((tag) => (
+              <span key={tag.id} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
+                {tag.name}
+                <button
+                  onClick={() => removeTag(tag.id)}
+                  className="ml-2 text-green-600 hover:text-green-800 dark:text-green-400"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {(!editData.tags || editData.tags.length === 0) && (
+              <span className="text-sm text-gray-500 dark:text-gray-400">No tags assigned</span>
+            )}
+          </div>
+        </div>
+
+        {/* Attributes */}
+        <div className="border-t border-gray-200 dark:border-gray-600 pt-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Product Attributes</label>
+          
+          {/* Action Buttons */}
+          <div className="flex gap-2 mb-3">
+            <button
+              onClick={fetchExistingAttributes}
+              disabled={loadingAttributes}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
+            >
+              {loadingAttributes ? 'Loading...' : 'Choose Existing Attribute'}
+            </button>
+            <span className="text-gray-400 self-center">or</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400 self-center">create new below</span>
+          </div>
+
+          {/* Existing Attribute Selector */}
+          {showAttributeSelector && (
+            <div className="border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-blue-50 dark:bg-blue-900/20 mb-3">
+              <div className="flex justify-between items-center mb-2">
+                <h5 className="text-sm font-medium text-gray-900 dark:text-gray-100">Select Existing Attribute</h5>
+                <button
+                  onClick={() => setShowAttributeSelector(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {availableAttributes.map((attribute) => (
+                  <button
+                    key={attribute.id}
+                    onClick={() => addExistingAttribute(attribute)}
+                    className="w-full text-left px-3 py-2 rounded hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors"
+                  >
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{attribute.name}</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-300">Type: {attribute.type || 'select'}</div>
+                  </button>
+                ))}
+                {availableAttributes.length === 0 && (
+                  <div className="text-sm text-gray-500 dark:text-gray-400 p-2">No existing attributes found</div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Existing Attributes */}
+          {editData.attributes && editData.attributes.length > 0 && (
+            <div className="space-y-3 mb-4">
+              {editData.attributes.map((attribute, index) => (
+                <div key={index} className="border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{attribute.name}</span>
+                    <button
+                      onClick={() => {
+                        const newAttributes = editData.attributes.filter((_, i) => i !== index);
+                        handleInputChange('attributes', newAttributes);
+                      }}
+                      className="text-red-600 hover:text-red-800 dark:text-red-400"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                    Values: {Array.isArray(attribute.options) ? attribute.options.join(', ') : attribute.options || 'No values'}
+                  </div>
+                  <div className="flex gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Visible: {attribute.visible ? 'Yes' : 'No'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add New Attribute */}
+          <div className="border border-gray-200 dark:border-gray-600 rounded-md p-4 bg-white dark:bg-gray-800">
+            <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3">Add New Attribute</h4>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Attribute Name</label>
+                <input
+                  type="text"
+                  value={attributeInput.name}
+                  onChange={(e) => setAttributeInput(prev => ({ ...prev, name: e.target.value }))}
+                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+                  placeholder="e.g., Color, Size, Material"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Attribute Values</label>
+                <input
+                  type="text"
+                  value={attributeInput.values}
+                  onChange={(e) => setAttributeInput(prev => ({ ...prev, values: e.target.value }))}
+                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+                  placeholder="e.g., Red | Blue | Green (separate with |)"
+                />
+              </div>
+              
+              <div className="flex gap-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={attributeInput.visible}
+                    onChange={(e) => setAttributeInput(prev => ({ ...prev, visible: e.target.checked }))}
+                    className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Visible on product page</span>
+                </label>
+              </div>
+              
+              <button
+                onClick={addAttribute}
+                disabled={!attributeInput.name || !attributeInput.values}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Add Attribute
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Published Date */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Published Date</label>
+          <div className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 ${isMobile ? 'text-base' : ''}`}>
+            {editData.date_created ? new Date(editData.date_created).toLocaleString() : 'Not published yet'}
+          </div>
+        </div>
+
+        {/* Upsells */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upsells (Product IDs)</label>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              value={upsellInput}
+              onChange={(e) => setUpsellInput(e.target.value)}
+              className={`flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+              placeholder="Product ID (e.g. 123)"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && upsellInput.trim()) {
+                  const newUpsells = [...editData.upsell_ids, parseInt(upsellInput.trim())];
+                  handleInputChange('upsell_ids', newUpsells);
+                  setUpsellInput('');
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                if (upsellInput.trim() && !isNaN(upsellInput.trim())) {
+                  const newUpsells = [...editData.upsell_ids, parseInt(upsellInput.trim())];
+                  handleInputChange('upsell_ids', newUpsells);
+                  setUpsellInput('');
+                }
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {editData.upsell_ids.map((id, index) => (
+              <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300">
+                ID: {id}
+                <button
+                  onClick={() => {
+                    const newUpsells = editData.upsell_ids.filter((_, i) => i !== index);
+                    handleInputChange('upsell_ids', newUpsells);
+                  }}
+                  className="ml-2 text-purple-600 hover:text-purple-800 dark:text-purple-400"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Cross-sells */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cross-sells (Product IDs)</label>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              value={crossSellInput}
+              onChange={(e) => setCrossSellInput(e.target.value)}
+              className={`flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+              placeholder="Product ID (e.g. 456)"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && crossSellInput.trim()) {
+                  const newCrossSells = [...editData.cross_sell_ids, parseInt(crossSellInput.trim())];
+                  handleInputChange('cross_sell_ids', newCrossSells);
+                  setCrossSellInput('');
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                if (crossSellInput.trim() && !isNaN(crossSellInput.trim())) {
+                  const newCrossSells = [...editData.cross_sell_ids, parseInt(crossSellInput.trim())];
+                  handleInputChange('cross_sell_ids', newCrossSells);
+                  setCrossSellInput('');
+                }
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {editData.cross_sell_ids.map((id, index) => (
+              <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300">
+                ID: {id}
+                <button
+                  onClick={() => {
+                    const newCrossSells = editData.cross_sell_ids.filter((_, i) => i !== index);
+                    handleInputChange('cross_sell_ids', newCrossSells);
+                  }}
+                  className="ml-2 text-orange-600 hover:text-orange-800 dark:text-orange-400"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Stock Management Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Stock Management</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Backorders */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Backorders
+            </label>
+            <select
+              value={editData.backorders || 'no'}
+              onChange={(e) => handleInputChange('backorders', e.target.value)}
+              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+            >
+              <option value="no">Do not allow</option>
+              <option value="notify">Allow, but notify customer</option>
+              <option value="yes">Allow</option>
+            </select>
+          </div>
+
+          {/* Stock Status */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Stock Status
+            </label>
+            <select
+              value={editData.stock_status || 'instock'}
+              onChange={(e) => handleInputChange('stock_status', e.target.value)}
+              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+            >
+              <option value="instock">In Stock</option>
+              <option value="outofstock">Out of Stock</option>
+              <option value="onbackorder">On Backorder</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Stock Options */}
+        <div className="border-t border-gray-200 dark:border-gray-600 pt-4 space-y-3">
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              checked={editData.manage_stock || false}
+              onChange={(e) => handleInputChange('manage_stock', e.target.checked)}
+              className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Manage Stock</span>
+          </label>
+          
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              checked={editData.sold_individually || false}
+              onChange={(e) => handleInputChange('sold_individually', e.target.checked)}
+              className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Sold Individually (limit to 1 per order)</span>
+          </label>
+        </div>
+
+        {/* Stock Quantity - only show if manage_stock is enabled */}
+        {editData.manage_stock && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Stock Quantity
+            </label>
+            <input
+              type="number"
+              value={editData.stock_quantity || ''}
+              onChange={(e) => handleInputChange('stock_quantity', e.target.value)}
+              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+              placeholder="0"
+              min="0"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Advanced Product Settings Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6 space-y-4">
         <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Advanced Product Settings</h3>
         
         <div>
@@ -56,170 +640,32 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
           <label className="flex items-center">
             <input
               type="checkbox"
-              checked={editData.featured}
-              onChange={(e) => handleInputChange('featured', e.target.checked)}
-              className={`mr-2 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} text-blue-600 rounded`}
-            />
-            <span className={`${isMobile ? 'text-base' : 'text-sm'} text-gray-700 dark:text-gray-300`}>Featured Product</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={editData.virtual}
+              checked={editData.virtual || false}
               onChange={(e) => handleInputChange('virtual', e.target.checked)}
-              className={`mr-2 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} text-blue-600 rounded`}
+              className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
-            <span className={`${isMobile ? 'text-base' : 'text-sm'} text-gray-700 dark:text-gray-300`}>Virtual</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Virtual Product</span>
           </label>
+          
           <label className="flex items-center">
             <input
               type="checkbox"
-              checked={editData.downloadable}
+              checked={editData.downloadable || false}
               onChange={(e) => handleInputChange('downloadable', e.target.checked)}
-              className={`mr-2 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} text-blue-600 rounded`}
+              className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
-            <span className={`${isMobile ? 'text-base' : 'text-sm'} text-gray-700 dark:text-gray-300`}>Downloadable</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Downloadable Product</span>
           </label>
+          
           <label className="flex items-center">
             <input
               type="checkbox"
-              checked={editData.reviews_allowed}
+              checked={editData.reviews_allowed !== false}
               onChange={(e) => handleInputChange('reviews_allowed', e.target.checked)}
-              className={`mr-2 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} text-blue-600 rounded`}
+              className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
-            <span className={`${isMobile ? 'text-base' : 'text-sm'} text-gray-700 dark:text-gray-300`}>Allow Reviews</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Allow Reviews</span>
           </label>
-        </div>
-      </div>
-
-      {/* Advanced Inventory */}
-      <div className={`${isMobile ? 'space-y-3 w-full max-w-full' : 'space-y-4'}`}>
-        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Advanced Inventory</h3>
-        
-        <div className="flex items-center mb-4">
-          <input
-            type="checkbox"
-            checked={editData.manage_stock}
-            onChange={(e) => handleInputChange('manage_stock', e.target.checked)}
-            className={`mr-2 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} text-blue-600 rounded`}
-          />
-          <label className={`${isMobile ? 'text-base' : 'text-sm'} font-medium text-gray-700 dark:text-gray-300`}>
-            Manage Stock
-          </label>
-        </div>
-
-        <div className={`grid ${isMobile ? 'grid-cols-1 gap-3' : 'grid-cols-1 sm:grid-cols-2 gap-4'}`}>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Backorders
-            </label>
-            <select
-              value={editData.backorders}
-              onChange={(e) => handleInputChange('backorders', e.target.value)}
-              className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-            >
-              <option value="no">Do not allow</option>
-              <option value="notify">Allow, but notify customer</option>
-              <option value="yes">Allow</option>
-            </select>
-          </div>
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              checked={editData.sold_individually}
-              onChange={(e) => handleInputChange('sold_individually', e.target.checked)}
-              className={`mr-2 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} text-blue-600 rounded`}
-            />
-            <label className={`${isMobile ? 'text-base' : 'text-sm'} font-medium text-gray-700 dark:text-gray-300`}>
-              Sold Individually (limit to 1 per order)
-            </label>
-          </div>
-        </div>
-      </div>
-
-      {/* External Product */}
-      {editData.type === 'external' && (
-        <div className={`${isMobile ? 'space-y-3 w-full max-w-full' : 'space-y-4'}`}>
-          <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>External Product</h3>
-          
-          <div className={`grid ${isMobile ? 'grid-cols-1 gap-3' : 'grid-cols-1 sm:grid-cols-2 gap-4'} ${isMobile ? 'w-full' : ''}`}>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Product URL
-              </label>
-              <input
-                type="url"
-                value={editData.external_url}
-                onChange={(e) => handleInputChange('external_url', e.target.value)}
-                className={`w-full ${isMobile ? 'min-w-0 max-w-full' : ''} px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-                placeholder="https://example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Button Text
-              </label>
-              <input
-                type="text"
-                value={editData.button_text}
-                onChange={(e) => handleInputChange('button_text', e.target.value)}
-                className={`w-full ${isMobile ? 'min-w-0 max-w-full' : ''} px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-                placeholder="Buy Now"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Downloadable Product */}
-      {editData.downloadable && (
-        <div className="space-y-4">
-          <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Downloadable Product</h3>
-          
-          <div className={`grid ${isMobile ? 'grid-cols-1 gap-3' : 'grid-cols-1 sm:grid-cols-2 gap-4'}`}>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Download Limit
-              </label>
-              <input
-                type="number"
-                value={editData.download_limit}
-                onChange={(e) => handleInputChange('download_limit', parseInt(e.target.value) || -1)}
-                className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-                placeholder="-1 for unlimited"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Download Expiry (days)
-              </label>
-              <input
-                type="number"
-                value={editData.download_expiry}
-                onChange={(e) => handleInputChange('download_expiry', parseInt(e.target.value) || -1)}
-                className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-                placeholder="-1 for no expiry"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Additional Settings */}
-      <div className="space-y-4">
-        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Additional Settings</h3>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Purchase Note
-          </label>
-          <textarea
-            value={editData.purchase_note}
-            onChange={(e) => handleInputChange('purchase_note', e.target.value)}
-            rows={3}
-            className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-            placeholder="Note to customer after purchase"
-          />
         </div>
       </div>
     </div>

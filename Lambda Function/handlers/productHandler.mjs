@@ -59,6 +59,160 @@ function makeWordPressRequest(baseUrl, endpoint, auth, params = {}, method = 'GE
     });
 }
 
+// NEW: Upload base64 image to WooCommerce media library
+async function uploadImageToWooCommerceMedia(baseUrl, auth, base64Data, fileName, altText) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Extract image data from base64
+            const matches = base64Data.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+            if (!matches || matches.length !== 3) {
+                throw new Error('Invalid base64 image format');
+            }
+            
+            const imageType = matches[1];
+            const imageBuffer = Buffer.from(matches[2], 'base64');
+            
+            // Generate filename with proper extension
+            const fileExtension = imageType === 'jpeg' ? 'jpg' : imageType;
+            const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+            const finalFileName = `${sanitizedFileName}.${fileExtension}`;
+            
+            const url = new URL(`${baseUrl}/wp-json/wp/v2/media`);
+            
+            // Create proper multipart form data
+            const boundary = `----formdata-karoosync-${Date.now()}`;
+            const CRLF = '\r\n';
+            
+            const formDataParts = [
+                `--${boundary}${CRLF}`,
+                `Content-Disposition: form-data; name="file"; filename="${finalFileName}"${CRLF}`,
+                `Content-Type: image/${imageType}${CRLF}${CRLF}`
+            ];
+            
+            const formDataEnd = [
+                `${CRLF}--${boundary}${CRLF}`,
+                `Content-Disposition: form-data; name="alt_text"${CRLF}${CRLF}`,
+                altText || 'Product image',
+                `${CRLF}--${boundary}--${CRLF}`
+            ];
+            
+            // Calculate content length
+            const formDataStart = Buffer.from(formDataParts.join(''));
+            const formDataEndBuffer = Buffer.from(formDataEnd.join(''));
+            const contentLength = formDataStart.length + imageBuffer.length + formDataEndBuffer.length;
+            
+            const options = {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'User-Agent': 'Karoosync/2.0',
+                    'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                    'Content-Length': contentLength
+                },
+                timeout: 60000
+            };
+            
+            const req = https.request(url, options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        try {
+                            const mediaResponse = JSON.parse(data);
+                            console.log(`✅ Uploaded image to media library: ${mediaResponse.source_url}`);
+                            resolve({
+                                id: mediaResponse.id,
+                                url: mediaResponse.source_url,
+                                alt: mediaResponse.alt_text || altText
+                            });
+                        } catch (e) {
+                            reject(new Error('Invalid JSON response from media upload'));
+                        }
+                    } else {
+                        console.error(`Media upload failed: ${res.statusCode} - ${data}`);
+                        reject(new Error(`Media upload failed: HTTP ${res.statusCode}`));
+                    }
+                });
+            });
+            
+            req.on('error', (error) => {
+                console.error('Media upload request error:', error);
+                reject(error);
+            });
+            
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Media upload timeout'));
+            });
+            
+            // Write the multipart form data properly
+            req.write(formDataStart);
+            req.write(imageBuffer);
+            req.write(formDataEndBuffer);
+            req.end();
+            
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+// NEW: Process product images with WooCommerce media upload
+async function processProductImages(images, baseUrl, auth, productName) {
+    if (!images || !Array.isArray(images)) {
+        return [];
+    }
+    
+    const processedImages = [];
+    
+    for (let i = 0; i < images.length; i++) {
+        const image = images[i];
+        
+        try {
+            if (image.src?.startsWith('data:image/')) {
+                // Upload base64 image to WooCommerce media library
+                console.log(`📤 Uploading base64 image ${i + 1} to WooCommerce media library...`);
+                
+                const fileName = image.name || `${productName?.replace(/[^a-zA-Z0-9]/g, '-')}-${i + 1}` || `image-${i + 1}`;
+                const altText = image.alt || productName || 'Product image';
+                
+                const uploadResult = await uploadImageToWooCommerceMedia(
+                    baseUrl, 
+                    auth, 
+                    image.src, 
+                    fileName, 
+                    altText
+                );
+                
+                processedImages.push({
+                    src: uploadResult.url,
+                    name: fileName,
+                    alt: uploadResult.alt,
+                    id: uploadResult.id
+                });
+                
+                console.log(`✅ Successfully uploaded image to WooCommerce: ${uploadResult.url}`);
+                
+            } else if (image.src && typeof image.src === 'string') {
+                // Handle URL image (pass through unchanged - don't upload)
+                console.log(`📎 Using existing URL image: ${image.src}`);
+                processedImages.push({
+                    src: image.src,
+                    name: image.name || `image-${i + 1}`,
+                    alt: image.alt || productName || 'Product image',
+                    id: image.id || 0
+                });
+            }
+        } catch (error) {
+            console.error(`❌ Failed to process image ${i + 1}:`, error);
+            // Continue with other images even if one fails
+            // You could optionally add a fallback here or skip the image
+        }
+    }
+    
+    return processedImages;
+}
+
 async function getUserCredentials(userId) {
     try {
         const response = await s3Client.send(new GetObjectCommand({
@@ -205,15 +359,27 @@ async function updateRegularProduct(userId, productId, productData) {
             stock_quantity: productData.stock_quantity ? parseInt(productData.stock_quantity) : null
         };
         
+        // NEW: Process images with WooCommerce media upload support
         if (processedData.images) {
-            processedData.images = processedData.images
-                .filter(image => !image.src?.startsWith('data:image/'))
-                .map((image, index) => ({
-                    src: image.src,
-                    name: image.name || `image-${index + 1}`,
-                    alt: image.alt || processedData.name || 'Product image',
-                    id: image.id || 0
-                }));
+            console.log(`🖼️  Processing ${processedData.images.length} images...`);
+            processedData.images = await processProductImages(
+                processedData.images, 
+                baseUrl, 
+                auth, 
+                processedData.name
+            );
+            console.log(`✅ Processed ${processedData.images.length} images for upload`);
+        }
+
+        // NEW: Process new tags and attributes
+        if (processedData.tags) {
+            console.log(`🏷️ Processing ${processedData.tags.length} tags...`);
+            processedData.tags = await processNewTags(baseUrl, auth, processedData.tags);
+        }
+        
+        if (processedData.attributes) {
+            console.log(`🔧 Processing ${processedData.attributes.length} attributes...`);
+            processedData.attributes = await processNewAttributes(baseUrl, auth, processedData.attributes);
         }
         
         Object.keys(processedData).forEach(key => {
@@ -260,15 +426,15 @@ async function updateVariableProduct(userId, productId, productData) {
         const parentData = { ...productData };
         delete parentData.variations;
 
-        // Process parent data same as regular product
+        // NEW: Process parent product images with WooCommerce media upload
         if (parentData.images) {
-            parentData.images = parentData.images
-                .filter(image => !image.src?.startsWith('data:image/'))
-                .map((image, index) => ({
-                    src: image.src,
-                    name: image.name || `image-${index + 1}`,
-                    alt: image.alt || parentData.name || 'Product image'
-                }));
+            console.log(`🖼️  Processing parent product images...`);
+            parentData.images = await processProductImages(
+                parentData.images,
+                baseUrl,
+                auth,
+                parentData.name
+            );
         }
 
         Object.keys(parentData).forEach(key => {
@@ -419,6 +585,87 @@ async function updateMetadataAfterCategoryChange(userId) {
     }
 }
 
+// Add after your existing helper functions
+async function createTagInWooCommerce(baseUrl, auth, tagData) {
+    return makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/tags', auth, {}, 'POST', tagData);
+}
+
+async function createAttributeInWooCommerce(baseUrl, auth, attributeData) {
+    return makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/attributes', auth, {}, 'POST', attributeData);
+}
+
+async function processNewTags(baseUrl, auth, tags) {
+    const processedTags = [];
+    
+    for (const tag of tags) {
+        if (tag.id < 0 || typeof tag.id === 'string') {
+            // This is a new tag, create it in WooCommerce
+            try {
+                const newTag = await createTagInWooCommerce(baseUrl, auth, {
+                    name: tag.name,
+                    description: tag.description || ''
+                });
+                processedTags.push(newTag);
+                console.log(`✅ Created new tag: ${newTag.name} (ID: ${newTag.id})`);
+            } catch (error) {
+                console.error(`❌ Failed to create tag ${tag.name}:`, error);
+            }
+        } else {
+            // Existing tag
+            processedTags.push(tag);
+        }
+    }
+    
+    return processedTags;
+}
+
+async function processNewAttributes(baseUrl, auth, attributes) {
+    const processedAttributes = [];
+    
+    for (const attr of attributes) {
+        if (!attr.id || attr.id < 0) {
+            // This is a new attribute, create it in WooCommerce
+            try {
+                const newAttribute = await createAttributeInWooCommerce(baseUrl, auth, {
+                    name: attr.name,
+                    slug: attr.name.toLowerCase().replace(/\s+/g, '-'),
+                    type: 'select',
+                    order_by: 'menu_order',
+                    has_archives: false
+                });
+                
+                // Add terms/options to the attribute
+                if (attr.options && attr.options.length > 0) {
+                    for (const option of attr.options) {
+                        await makeWordPressRequest(
+                            baseUrl, 
+                            `/wp-json/wc/v3/products/attributes/${newAttribute.id}/terms`, 
+                            auth, 
+                            {}, 
+                            'POST', 
+                            { name: option }
+                        );
+                    }
+                }
+                
+                processedAttributes.push({
+                    ...attr,
+                    id: newAttribute.id,
+                    slug: newAttribute.slug
+                });
+                console.log(`✅ Created new attribute: ${newAttribute.name} (ID: ${newAttribute.id})`);
+            } catch (error) {
+                console.error(`❌ Failed to create attribute ${attr.name}:`, error);
+            }
+        } else {
+            // Existing attribute
+            processedAttributes.push(attr);
+        }
+    }
+    
+    return processedAttributes;
+}
+
 export async function handleProduct(event, userId) {
     if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'create-category') {
         console.log('📝 Create category request received');
@@ -440,13 +687,25 @@ export async function handleProduct(event, userId) {
             return {
                 statusCode: 400,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ success: false, error: 'Category name required' })
+                body: JSON.stringify({ success: false, error: 'Category name is required' })
             };
         }
-
+        
         try {
             const credentials = await getUserCredentials(userId);
-            const categoryData = { name, description: description || '', parent: parent || 0 };
+            if (!credentials) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'User credentials not found' })
+                };
+            }
+            
+            const categoryData = {
+                name: name.trim(),
+                description: description || '',
+                parent: parent || 0
+            };
             
             const newCategory = await createCategoryInWooCommerce(
                 credentials.url,
@@ -479,32 +738,77 @@ export async function handleProduct(event, userId) {
         }
     }
 
-    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'duplicate-product') {
-        console.log('📋 Duplicate product request received');
+    if (event.httpMethod === 'DELETE' && event.queryStringParameters?.action === 'delete-category') {
+        console.log('🗑️ Delete category request received');
         
-        let requestData;
-        try {
-            requestData = JSON.parse(event.body || '{}');
-        } catch (parseError) {
+        const categoryId = event.queryStringParameters?.categoryId;
+        if (!categoryId) {
             return {
                 statusCode: 400,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ success: false, error: 'Invalid JSON in request body' })
+                body: JSON.stringify({ success: false, error: 'Category ID is required' })
             };
         }
         
-        const { productId } = requestData;
+        try {
+            const credentials = await getUserCredentials(userId);
+            if (!credentials) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'User credentials not found' })
+                };
+            }
+            
+            await deleteCategoryInWooCommerce(
+                credentials.url,
+                credentials.username,
+                credentials.appPassword,
+                categoryId
+            );
+            
+            await updateMetadataAfterCategoryChange(userId);
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: true })
+            };
+            
+        } catch (error) {
+            console.error('Category deletion error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    success: false,
+                    error: error.message
+                })
+            };
+        }
+    }
+
+    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'duplicate') {
+        console.log('📋 Duplicate product request received');
         
+        const productId = event.queryStringParameters?.productId;
         if (!productId) {
             return {
                 statusCode: 400,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ success: false, error: 'Product ID required' })
+                body: JSON.stringify({ success: false, error: 'Product ID is required' })
             };
         }
-
+        
         try {
             const credentials = await getUserCredentials(userId);
+            if (!credentials) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'User credentials not found' })
+                };
+            }
             
             const duplicatedProduct = await duplicateProductInWooCommerce(
                 credentials.url,
@@ -535,21 +839,27 @@ export async function handleProduct(event, userId) {
         }
     }
 
-    if (event.httpMethod === 'DELETE' && event.queryStringParameters?.action === 'delete-product') {
+    if (event.httpMethod === 'DELETE' && event.queryStringParameters?.action === 'delete') {
         console.log('🗑️ Delete product request received');
         
         const productId = event.queryStringParameters?.productId;
-        
         if (!productId) {
             return {
                 statusCode: 400,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ success: false, error: 'Product ID required' })
+                body: JSON.stringify({ success: false, error: 'Product ID is required' })
             };
         }
-
+        
         try {
             const credentials = await getUserCredentials(userId);
+            if (!credentials) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'User credentials not found' })
+                };
+            }
             
             await deleteProductInWooCommerce(
                 credentials.url,
@@ -566,58 +876,6 @@ export async function handleProduct(event, userId) {
             
         } catch (error) {
             console.error('Product deletion error:', error);
-            return {
-                statusCode: 500,
-                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    success: false,
-                    error: error.message
-                })
-            };
-        }
-    }
-
-    if (event.httpMethod === 'DELETE' && event.queryStringParameters?.action === 'delete-category') {
-        const categoryId = event.queryStringParameters?.categoryId;
-        
-        if (!categoryId) {
-            return {
-                statusCode: 400,
-                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ success: false, error: 'Category ID required' })
-            };
-        }
-
-        try {
-            const credentials = await getUserCredentials(userId);
-            
-            await deleteCategoryInWooCommerce(
-                credentials.url,
-                credentials.username,
-                credentials.appPassword,
-                categoryId
-            );
-            
-            try {
-                const categoryKey = `category-${categoryId}`;
-                await s3Client.send(new DeleteObjectCommand({
-                    Bucket: BUCKET_NAME,
-                    Key: `users/${userId}/categories/${categoryKey}/products.json.gz`
-                }));
-            } catch (s3Error) {
-                console.log('S3 category file not found, skipping deletion');
-            }
-            
-            await updateMetadataAfterCategoryChange(userId);
-            
-            return {
-                statusCode: 200,
-                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ success: true })
-            };
-            
-        } catch (error) {
-            console.error('Category deletion error:', error);
             return {
                 statusCode: 500,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },

@@ -591,6 +591,9 @@ function normalizeProduct(product) {
         shipping_class_id: shippingClassId,
         tax_class_id: taxClassId,
         
+        // Keep original arrays for display
+        tags: product.tags || [],
+        
         // Attributes
         attributes: attributes,
         

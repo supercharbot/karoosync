@@ -97,7 +97,27 @@ export async function handleData(event, userId) {
                     body: JSON.stringify(result)
                 };
             }
+            
+            if (action === 'load-woo-categories') {
+                console.log('📂 Loading WooCommerce categories');
+                const result = await loadWooCommerceCategories(userId);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
 
+            if (action === 'load-woo-tags') {
+                console.log('🏷️ Loading WooCommerce tags');
+                const result = await loadWooCommerceTags(userId);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
+            
             if (action === 'search') {
                 const searchTerm = event.queryStringParameters?.q;
                 if (!searchTerm) {
@@ -117,6 +137,24 @@ export async function handleData(event, userId) {
                 };
                 
                 const result = await searchProducts(userId, searchTerm, options);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
+            
+            if (action === 'load-woocommerce-tags') {
+                const result = await loadWooCommerceTags(userId);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
+
+            if (action === 'load-woocommerce-attributes') {
+                const result = await loadWooCommerceAttributes(userId);
                 return {
                     statusCode: 200,
                     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -620,5 +658,103 @@ async function getUserCredentials(userId) {
         return JSON.parse(zlib.gunzipSync(compressed).toString());
     } catch (error) {
         throw new Error(`Failed to get user credentials: ${error.message}`);
+    }
+}
+
+// Fetch categories directly from WooCommerce
+async function loadWooCommerceCategories(userId) {
+    try {
+        const credentials = await getUserCredentials(userId);
+        if (!credentials) {
+            return { success: false, error: 'User credentials not found' };
+        }
+
+        const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
+        const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
+        
+        const categories = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/categories', auth, { 
+            per_page: 100,
+            orderby: 'name',
+            order: 'asc'
+        });
+        
+        return {
+            success: true,
+            categories: categories || []
+        };
+    } catch (error) {
+        console.error('Failed to load WooCommerce categories:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+async function loadWooCommerceTags(userId) {
+    try {
+        console.log(`🏷️ Loading WooCommerce tags for user: ${userId}`);
+        
+        const credentials = await getUserCredentials(userId);
+        if (!credentials) {
+            return {
+                success: false,
+                error: 'User credentials not found. Please reconnect your store.'
+            };
+        }
+
+        const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
+        const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
+        
+        // Fetch all tags from WooCommerce
+        const tags = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/tags', auth, { per_page: 100 });
+        
+        console.log(`✅ Loaded ${tags.length} tags from WooCommerce`);
+        
+        return {
+            success: true,
+            tags: tags
+        };
+        
+    } catch (error) {
+        console.error(`❌ Error loading WooCommerce tags:`, error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+async function loadWooCommerceAttributes(userId) {
+    try {
+        console.log(`🔧 Loading WooCommerce attributes for user: ${userId}`);
+        
+        const credentials = await getUserCredentials(userId);
+        if (!credentials) {
+            return {
+                success: false,
+                error: 'User credentials not found. Please reconnect your store.'
+            };
+        }
+
+        const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
+        const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
+        
+        // Fetch all attributes from WooCommerce
+        const attributes = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/attributes', auth, { per_page: 100 });
+        
+        console.log(`✅ Loaded ${attributes.length} attributes from WooCommerce`);
+        
+        return {
+            success: true,
+            attributes: attributes
+        };
+        
+    } catch (error) {
+        console.error(`❌ Error loading WooCommerce attributes:`, error);
+        return {
+            success: false,
+            error: error.message
+        };
     }
 }

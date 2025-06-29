@@ -52,6 +52,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
     // Categories and Tags
     categories: product.categories || [],
     tags: product.tags || [],
+    tag_ids: product.tag_ids || [],
     
     // Advanced
     reviews_allowed: product.reviews_allowed !== false,
@@ -104,7 +105,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
     
     const hasUploadedFiles = editData.images.some(img => img.file);
     if (hasUploadedFiles) {
-      setSaveStatus('Note: Uploaded files are not saved to WooCommerce (URL images only)');
+      setSaveStatus('Uploading images to WooCommerce media library...');
     }
     
     try {
@@ -373,11 +374,11 @@ const ProductEditor = ({
 
       {/* Advanced Settings */}
       {showAdvanced && (
-        <AdvancedSettings 
-          editData={editData}
-          handleInputChange={handleInputChange}
-          isMobile={isMobile}
-        />
+          <AdvancedSettings 
+            editData={editData}
+            handleInputChange={handleInputChange}
+            isMobile={isMobile}
+          />
       )}
     </div>
   );
