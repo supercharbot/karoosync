@@ -623,8 +623,19 @@ async function processNewAttributes(baseUrl, auth, attributes) {
     const processedAttributes = [];
     
     for (const attr of attributes) {
-        if (!attr.id || attr.id < 0) {
-            // This is a new attribute, create it in WooCommerce
+        if (!attr.id || attr.id === 0) {
+            // This is a custom attribute (id: 0), format for WooCommerce
+            processedAttributes.push({
+                id: 0,
+                name: attr.name,
+                position: attr.position || 0,
+                visible: attr.visible !== false,
+                variation: attr.variation || false,
+                options: attr.options || []
+            });
+            console.log(`✅ Formatted custom attribute: ${attr.name}`);
+        } else if (attr.id < 0) {
+            // This is a new global attribute, create it in WooCommerce
             try {
                 const newAttribute = await createAttributeInWooCommerce(baseUrl, auth, {
                     name: attr.name,
@@ -649,17 +660,36 @@ async function processNewAttributes(baseUrl, auth, attributes) {
                 }
                 
                 processedAttributes.push({
-                    ...attr,
                     id: newAttribute.id,
-                    slug: newAttribute.slug
+                    name: newAttribute.name,
+                    position: attr.position || 0,
+                    visible: attr.visible !== false,
+                    variation: attr.variation || false,
+                    options: attr.options || []
                 });
-                console.log(`✅ Created new attribute: ${newAttribute.name} (ID: ${newAttribute.id})`);
+                console.log(`✅ Created new global attribute: ${newAttribute.name} (ID: ${newAttribute.id})`);
             } catch (error) {
                 console.error(`❌ Failed to create attribute ${attr.name}:`, error);
+                // Fallback to custom attribute
+                processedAttributes.push({
+                    id: 0,
+                    name: attr.name,
+                    position: attr.position || 0,
+                    visible: attr.visible !== false,
+                    variation: attr.variation || false,
+                    options: attr.options || []
+                });
             }
         } else {
-            // Existing attribute
-            processedAttributes.push(attr);
+            // Existing global attribute
+            processedAttributes.push({
+                id: attr.id,
+                name: attr.name,
+                position: attr.position || 0,
+                visible: attr.visible !== false,
+                variation: attr.variation || false,
+                options: attr.options || []
+            });
         }
     }
     

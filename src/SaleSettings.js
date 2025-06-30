@@ -19,6 +19,12 @@ const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
     return '';
   });
 
+  // Local state for date inputs to handle formatting without conflicts
+  const [localDateInputs, setLocalDateInputs] = useState({
+    date_on_sale_from: convertFromISODate(editData.date_on_sale_from),
+    date_on_sale_to: convertFromISODate(editData.date_on_sale_to)
+  });
+
   // Format date input with slashes
   const formatDateInput = (value) => {
     const digits = value.replace(/\D/g, '');
@@ -44,7 +50,7 @@ const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
   };
 
   // Convert ISO date back to dd/mm/yyyy for display
-  const convertFromISODate = (isoString) => {
+  function convertFromISODate(isoString) {
     if (!isoString) return '';
     
     const date = new Date(isoString);
@@ -58,9 +64,25 @@ const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
   };
 
   const handleDateChange = (field, value) => {
+    // Format the input value for display
     const formattedValue = formatDateInput(value);
-    const isoDate = convertToISODate(formattedValue);
-    handleInputChange(field, isoDate);
+    
+    // Update local state immediately for smooth typing
+    setLocalDateInputs(prev => ({
+      ...prev,
+      [field]: formattedValue
+    }));
+    
+    // Only update the main state if we have a complete date
+    if (formattedValue.length === 10) {
+      const isoDate = convertToISODate(formattedValue);
+      if (isoDate) {
+        handleInputChange(field, isoDate);
+      }
+    } else if (formattedValue === '') {
+      // Clear the date if input is empty
+      handleInputChange(field, '');
+    }
   };
 
   const handlePutOnSale = () => {
@@ -75,6 +97,10 @@ const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
   const handleRemoveFromSale = () => {
     setSaleMode(false);
     setPercentageInput('');
+    setLocalDateInputs({
+      date_on_sale_from: '',
+      date_on_sale_to: ''
+    });
     handleInputChange('sale_price', '');
     handleInputChange('date_on_sale_from', '');
     handleInputChange('date_on_sale_to', '');
@@ -184,7 +210,7 @@ const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
               <input
                 type="text"
                 autoComplete="off"
-                value={convertFromISODate(editData.date_on_sale_from)}
+                value={localDateInputs.date_on_sale_from}
                 onChange={(e) => handleDateChange('date_on_sale_from', e.target.value)}
                 className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
                 placeholder="DD/MM/YYYY"
@@ -199,7 +225,7 @@ const SaleSettings = ({ editData, handleInputChange, isMobile = false }) => {
               <input
                 type="text"
                 autoComplete="off"
-                value={convertFromISODate(editData.date_on_sale_to)}
+                value={localDateInputs.date_on_sale_to}
                 onChange={(e) => handleDateChange('date_on_sale_to', e.target.value)}
                 className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
                 placeholder="DD/MM/YYYY"
