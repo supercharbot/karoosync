@@ -429,3 +429,27 @@ export async function deleteProduct(productId, authToken) {
 
   return result;
 }
+
+// ============================================
+// WOOCOMMERCE DATA FUNCTIONS
+// ============================================
+
+export async function loadWooCommerceTags(authToken) {
+  console.log('🏷️ Loading WooCommerce tags...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=load-woocommerce-tags`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
+export async function loadWooCommerceAttributes(authToken) {
+  console.log('🔧 Loading WooCommerce attributes...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=load-woocommerce-attributes`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
+import { loadWooCommerceTags, loadWooCommerceAttributes } from './api';
+import { useAuth } from './AuthContext';
 
 const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => {
+  const { getAuthToken } = useAuth();
   // State for input fields
   const [tagInput, setTagInput] = useState('');
   const [tagDescription, setTagDescription] = useState('');
@@ -43,18 +46,19 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
   const fetchExistingTags = async () => {
     setLoadingTags(true);
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_ENDPOINT || ''}?action=load-woocommerce-tags`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}` // Adjust based on your auth system
-        }
-      });
+      const authToken = await getAuthToken();
+      if (!authToken) {
+        console.error('No authentication token available');
+        return;
+      }
       
-      if (response.ok) {
-        const result = await response.json();
+      const result = await loadWooCommerceTags(authToken);
+      
+      if (result.success) {
         setAvailableTags(result.tags || []);
         setShowTagSelector(true);
       } else {
-        console.error('Failed to fetch tags');
+        console.error('Failed to fetch tags:', result.error);
       }
     } catch (error) {
       console.error('Error fetching tags:', error);
@@ -67,18 +71,23 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
   const fetchExistingAttributes = async () => {
     setLoadingAttributes(true);
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_ENDPOINT || ''}?action=load-woocommerce-attributes`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}` // Adjust based on your auth system
-        }
-      });
+      const authToken = await getAuthToken();
+      if (!authToken) {
+        console.error('No authentication token available');
+        return;
+      }
       
-      if (response.ok) {
-        const result = await response.json();
+      const result = await loadWooCommerceAttributes(authToken);
+      
+      if (result.success) {
+        console.log('🔍 DEBUGGING: Raw attributes from WooCommerce:', result.attributes);
+        result.attributes.forEach((attr, index) => {
+          console.log(`🔍 DEBUGGING: Attribute ${index}:`, attr);
+        });
         setAvailableAttributes(result.attributes || []);
         setShowAttributeSelector(true);
       } else {
-        console.error('Failed to fetch attributes');
+        console.error('Failed to fetch attributes:', result.error);
       }
     } catch (error) {
       console.error('Error fetching attributes:', error);
@@ -102,6 +111,7 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
 
   // Add existing attribute to product
   const addExistingAttribute = (attribute) => {
+    console.log('🔍 DEBUGGING: Adding attribute:', attribute);
     const currentAttributes = editData.attributes || [];
     const alreadyExists = currentAttributes.find(a => a.id === attribute.id || a.name === attribute.name);
     
@@ -110,9 +120,10 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
         id: attribute.id,
         name: attribute.name,
         slug: attribute.slug,
-        options: [], // Will be populated when user adds options
+        options: attribute.terms ? attribute.terms.map(term => term.name) : [],
         visible: true
       }];
+      console.log('🔍 DEBUGGING: New attribute object:', newAttributes[newAttributes.length - 1]);
       handleInputChange('attributes', newAttributes);
     }
     

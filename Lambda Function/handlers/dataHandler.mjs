@@ -1,5 +1,6 @@
 import zlib from 'zlib';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import https from 'https';
 
 const s3Client = new S3Client({ region: 'ap-southeast-2' });
 const BUCKET_NAME = 'karoosync';
@@ -647,6 +648,54 @@ async function getCategoryInfo(userId, categoryId) {
     }
 }
 
+// Enhanced WordPress API request function
+function makeWordPressRequest(baseUrl, endpoint, auth, params = {}, method = 'GET', body = null) {
+    return new Promise((resolve, reject) => {
+        const url = new URL(`${baseUrl}${endpoint}`);
+        if (method === 'GET') {
+            Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+        }
+        
+        const options = {
+            method: method,
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'User-Agent': 'Karoosync/2.0',
+                'Content-Type': 'application/json'
+            },
+            timeout: 30000
+        };
+        
+        const req = https.request(url, options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        resolve(data ? JSON.parse(data) : {});
+                    } else {
+                        reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+                    }
+                } catch (parseError) {
+                    reject(new Error(`Parse error: ${parseError.message}`));
+                }
+            });
+        });
+        
+        req.on('error', reject);
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request timeout'));
+        });
+        
+        if (body && method !== 'GET') {
+            req.write(typeof body === 'string' ? body : JSON.stringify(body));
+        }
+        
+        req.end();
+    });
+}
+
 async function getUserCredentials(userId) {
     try {
         const response = await s3Client.send(new GetObjectCommand({
@@ -743,7 +792,18 @@ async function loadWooCommerceAttributes(userId) {
         // Fetch all attributes from WooCommerce
         const attributes = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/attributes', auth, { per_page: 100 });
         
-        console.log(`✅ Loaded ${attributes.length} attributes from WooCommerce`);
+        // Fetch terms for each attribute
+        for (const attribute of attributes) {
+            try {
+                const terms = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/attributes/${attribute.id}/terms`, auth, { per_page: 100 });
+                attribute.terms = terms || [];
+            } catch (termError) {
+                console.error(`Failed to load terms for attribute ${attribute.name}:`, termError);
+                attribute.terms = [];
+            }
+        }
+        
+        console.log(`✅ Loaded ${attributes.length} attributes with terms from WooCommerce`);
         
         return {
             success: true,

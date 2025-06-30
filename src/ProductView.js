@@ -109,7 +109,9 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
     }
     
     try {
-      const authToken = await getAuthToken();   
+      const authToken = await getAuthToken();
+      console.log('🔍 DEBUGGING: Saving product with attributes:', editData.attributes);
+      console.log('🔍 DEBUGGING: Full editData:', editData);
       const result = await updateProduct(product.id, editData, authToken);
       
       if (result.success) {
