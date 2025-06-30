@@ -114,7 +114,7 @@ export const handler = async (event) => {
         }
         
         // Data operations: check-data and load-category (GET)
-        if (action === 'check-data' || action === 'load-category' || action === 'load-categories' || action === 'load-product' || action === 'load-variations' || action === 'search' || action === 'load-woocommerce-tags' || action === 'load-woocommerce-attributes') {
+        if (action === 'check-data' || action === 'load-category' || action === 'load-categories' || action === 'load-product' || action === 'load-variations' || action === 'search' || action === 'load-woocommerce-tags' || action === 'load-woocommerce-attributes' || action === 'load-woocommerce-shipping-classes') {
             console.log('📊 Routing to Data handler');
             return await handleData(event, userId);
         }

@@ -593,6 +593,7 @@ function normalizeProduct(product) {
         
         // Keep original arrays for display
         tags: product.tags || [],
+        shipping_classes: product.shipping_classes || [],
         
         // Attributes
         attributes: attributes,
@@ -608,6 +609,8 @@ function normalizeProduct(product) {
         // Shipping
         weight: product.weight || '',
         dimensions: product.dimensions || { length: '', width: '', height: '' },
+        shipping_class: product.shipping_class || '',
+        shipping_class_id: shippingClassId,
         
         // Images
         images: product.images || [],

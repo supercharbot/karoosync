@@ -21,6 +21,7 @@ const ProductView = ({ product, onBack, onProductUpdate }) => {
     type: product.type || 'simple',
     virtual: product.virtual || false,
     downloadable: product.downloadable || false,
+    date_created: product.date_created || '',
     
     // Pricing
     regular_price: product.regular_price || '',

@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Image, X, Upload, Plus } from 'lucide-react';
 import SaleSettings from './SaleSettings';
 import WysiwygEditor from './WysiwygEditor';
+import { loadWooCommerceShippingClasses } from './api';
+import { useAuth } from './AuthContext';
 
 const BasicSettings = ({ 
   editData, 
@@ -14,6 +16,32 @@ const BasicSettings = ({
   isMobile = false,
   hidepricing = false
 }) => {
+  const { getAuthToken } = useAuth();
+  const [availableShippingClasses, setAvailableShippingClasses] = useState([]);
+  const [loadingShippingClasses, setLoadingShippingClasses] = useState(false);
+  const [showShippingClassSelector, setShowShippingClassSelector] = useState(false);
+
+  const fetchExistingShippingClasses = async () => {
+    setLoadingShippingClasses(true);
+    try {
+      const authToken = await getAuthToken();
+      const result = await loadWooCommerceShippingClasses(authToken);
+      if (result.success) {
+        setAvailableShippingClasses(result.shipping_classes || []);
+        setShowShippingClassSelector(true);
+      }
+    } catch (error) {
+      console.error('Error fetching shipping classes:', error);
+    } finally {
+      setLoadingShippingClasses(false);
+    }
+  };
+
+  const addExistingShippingClass = (shippingClass) => {
+    handleInputChange('shipping_class', shippingClass.slug);
+    setShowShippingClassSelector(false);
+  };
+
   return (
     <div className={`${isMobile ? 'p-4 pb-20 w-full max-w-full min-w-0' : 'p-6'} ${isMobile ? 'space-y-4' : 'space-y-6'}`}>
       
@@ -364,13 +392,22 @@ const BasicSettings = ({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Shipping Class
             </label>
-            <input
-              type="text"
-              value={editData.shipping_class || ''}
-              onChange={(e) => handleInputChange('shipping_class', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              placeholder="Shipping class"
-            />
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={editData.shipping_class || ''}
+                onChange={(e) => handleInputChange('shipping_class', e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="Shipping class"
+              />
+              <button
+                onClick={fetchExistingShippingClasses}
+                disabled={loadingShippingClasses}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 transition-colors"
+              >
+                {loadingShippingClasses ? 'Loading...' : 'Browse'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -403,6 +440,38 @@ const BasicSettings = ({
           </div>
         </div>
       </div>
+
+      {/* Shipping Class Selector Modal */}
+      {showShippingClassSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 max-h-96 overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Select Shipping Class</h3>
+              <button
+                onClick={() => setShowShippingClassSelector(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {availableShippingClasses.map((shippingClass) => (
+                <button
+                  key={shippingClass.id}
+                  onClick={() => addExistingShippingClass(shippingClass)}
+                  className="w-full text-left p-3 border border-gray-200 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <div className="font-medium text-gray-900 dark:text-gray-100">{shippingClass.name}</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">{shippingClass.slug}</div>
+                  {shippingClass.description && (
+                    <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">{shippingClass.description}</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

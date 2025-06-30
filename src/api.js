@@ -453,3 +453,13 @@ export async function loadWooCommerceAttributes(authToken) {
 
   return result;
 }
+
+export async function loadWooCommerceShippingClasses(authToken) {
+  console.log('🚚 Loading WooCommerce shipping classes...');
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=load-woocommerce-shipping-classes`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}

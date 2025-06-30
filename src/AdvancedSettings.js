@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
-import { loadWooCommerceTags, loadWooCommerceAttributes } from './api';
+import { loadWooCommerceTags, loadWooCommerceAttributes, searchProducts } from './api';
 import { useAuth } from './AuthContext';
 
 const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => {
@@ -23,6 +23,11 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
   const [availableAttributes, setAvailableAttributes] = useState([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [loadingAttributes, setLoadingAttributes] = useState(false);
+const [showUpsellSearch, setShowUpsellSearch] = useState(false);
+  const [showCrossSellSearch, setShowCrossSellSearch] = useState(false);
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
   // Convert tag IDs to tag objects for display
   const getTagsForDisplay = () => {
@@ -183,6 +188,45 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
       values: '',
       visible: true
     });
+  };
+
+  const handleProductSearch = async (term) => {
+    setProductSearchTerm(term);
+    if (!term || term.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    
+    setSearching(true);
+    try {
+      const authToken = await getAuthToken();
+      const result = await searchProducts(term, { limit: 20 }, authToken);
+      setSearchResults(result.success ? result.products : []);
+    } catch (error) {
+      console.error('Product search error:', error);
+      setSearchResults([]);
+    }
+    setSearching(false);
+  };
+
+  const addUpsellProduct = (product) => {
+    const current = editData.upsell_ids || [];
+    if (!current.includes(product.id)) {
+      handleInputChange('upsell_ids', [...current, product.id]);
+    }
+    setShowUpsellSearch(false);
+    setProductSearchTerm('');
+    setSearchResults([]);
+  };
+
+  const addCrossSellProduct = (product) => {
+    const current = editData.cross_sell_ids || [];
+    if (!current.includes(product.id)) {
+      handleInputChange('cross_sell_ids', [...current, product.id]);
+    }
+    setShowCrossSellSearch(false);
+    setProductSearchTerm('');
+    setSearchResults([]);
   };
 
   return (
@@ -422,100 +466,64 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
 
         {/* Upsells */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upsells (Product IDs)</label>
-          <div className="flex gap-2 mb-2">
-            <input
-              type="text"
-              value={upsellInput}
-              onChange={(e) => setUpsellInput(e.target.value)}
-              className={`flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-              placeholder="Product ID (e.g. 123)"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && upsellInput.trim()) {
-                  const newUpsells = [...editData.upsell_ids, parseInt(upsellInput.trim())];
-                  handleInputChange('upsell_ids', newUpsells);
-                  setUpsellInput('');
-                }
-              }}
-            />
-            <button
-              onClick={() => {
-                if (upsellInput.trim() && !isNaN(upsellInput.trim())) {
-                  const newUpsells = [...editData.upsell_ids, parseInt(upsellInput.trim())];
-                  handleInputChange('upsell_ids', newUpsells);
-                  setUpsellInput('');
-                }
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {editData.upsell_ids.map((id, index) => (
-              <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300">
-                ID: {id}
-                <button
-                  onClick={() => {
-                    const newUpsells = editData.upsell_ids.filter((_, i) => i !== index);
-                    handleInputChange('upsell_ids', newUpsells);
-                  }}
-                  className="ml-2 text-purple-600 hover:text-purple-800 dark:text-purple-400"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upsells</label>
+          
+          {editData.upsell_ids?.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {editData.upsell_ids.map((productId, index) => (
+                <span key={index} className="inline-flex items-center px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-md text-sm">
+                  Product {productId}
+                  <button
+                    onClick={() => {
+                      const newUpsells = editData.upsell_ids.filter(id => id !== productId);
+                      handleInputChange('upsell_ids', newUpsells);
+                    }}
+                    className="ml-1 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          
+          <button
+            onClick={() => setShowUpsellSearch(true)}
+            className="w-full px-4 py-2 border border-dashed border-gray-300 dark:border-gray-600 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            + Search and Add Products
+          </button>
         </div>
 
         {/* Cross-sells */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cross-sells (Product IDs)</label>
-          <div className="flex gap-2 mb-2">
-            <input
-              type="text"
-              value={crossSellInput}
-              onChange={(e) => setCrossSellInput(e.target.value)}
-              className={`flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
-              placeholder="Product ID (e.g. 456)"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && crossSellInput.trim()) {
-                  const newCrossSells = [...editData.cross_sell_ids, parseInt(crossSellInput.trim())];
-                  handleInputChange('cross_sell_ids', newCrossSells);
-                  setCrossSellInput('');
-                }
-              }}
-            />
-            <button
-              onClick={() => {
-                if (crossSellInput.trim() && !isNaN(crossSellInput.trim())) {
-                  const newCrossSells = [...editData.cross_sell_ids, parseInt(crossSellInput.trim())];
-                  handleInputChange('cross_sell_ids', newCrossSells);
-                  setCrossSellInput('');
-                }
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {editData.cross_sell_ids.map((id, index) => (
-              <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300">
-                ID: {id}
-                <button
-                  onClick={() => {
-                    const newCrossSells = editData.cross_sell_ids.filter((_, i) => i !== index);
-                    handleInputChange('cross_sell_ids', newCrossSells);
-                  }}
-                  className="ml-2 text-orange-600 hover:text-orange-800 dark:text-orange-400"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cross-sells</label>
+          
+          {editData.cross_sell_ids?.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {editData.cross_sell_ids.map((productId, index) => (
+                <span key={index} className="inline-flex items-center px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-md text-sm">
+                  Product {productId}
+                  <button
+                    onClick={() => {
+                      const newCrossSells = editData.cross_sell_ids.filter(id => id !== productId);
+                      handleInputChange('cross_sell_ids', newCrossSells);
+                    }}
+                    className="ml-1 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          
+          <button
+            onClick={() => setShowCrossSellSearch(true)}
+            className="w-full px-4 py-2 border border-dashed border-gray-300 dark:border-gray-600 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            + Search and Add Products
+          </button>
         </div>
       </div>
 
@@ -608,7 +616,7 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
           </label>
           <input
             type="text"
-            value={editData.slug}
+            value={editData.slug || ''}
             onChange={(e) => handleInputChange('slug', e.target.value)}
             className={`w-full ${isMobile ? 'min-w-0 max-w-full' : ''} px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
             placeholder="product-slug"
@@ -679,6 +687,74 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => 
           </label>
         </div>
       </div>
+    {/* Product Search Modals */}
+      {showUpsellSearch && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 max-h-96 overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Search Products for Upsells</h3>
+              <button onClick={() => setShowUpsellSearch(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={productSearchTerm}
+              onChange={(e) => handleProductSearch(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md mb-4"
+              placeholder="Search products..."
+              autoFocus
+            />
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {searching && <div className="text-center text-gray-500">Searching...</div>}
+              {searchResults.map((product) => (
+                <button
+                  key={product.id}
+                  onClick={() => addUpsellProduct(product)}
+                  className="w-full text-left p-3 border rounded-md hover:bg-gray-50 transition-colors"
+                >
+                  <div className="font-medium">{product.name}</div>
+                  <div className="text-sm text-gray-500">ID: {product.id} • SKU: {product.sku}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCrossSellSearch && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 max-h-96 overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Search Products for Cross-sells</h3>
+              <button onClick={() => setShowCrossSellSearch(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={productSearchTerm}
+              onChange={(e) => handleProductSearch(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md mb-4"
+              placeholder="Search products..."
+              autoFocus
+            />
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {searching && <div className="text-center text-gray-500">Searching...</div>}
+              {searchResults.map((product) => (
+                <button
+                  key={product.id}
+                  onClick={() => addCrossSellProduct(product)}
+                  className="w-full text-left p-3 border rounded-md hover:bg-gray-50 transition-colors"
+                >
+                  <div className="font-medium">{product.name}</div>
+                  <div className="text-sm text-gray-500">ID: {product.id} • SKU: {product.sku}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

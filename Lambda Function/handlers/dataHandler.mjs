@@ -162,6 +162,15 @@ export async function handleData(event, userId) {
                     body: JSON.stringify(result)
                 };
             }
+
+            if (action === 'load-woocommerce-shipping-classes') {
+                const result = await loadWooCommerceShippingClasses(userId);
+                return {
+                    statusCode: 200,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                };
+            }
         }
         
         return {
@@ -812,6 +821,40 @@ async function loadWooCommerceAttributes(userId) {
         
     } catch (error) {
         console.error(`❌ Error loading WooCommerce attributes:`, error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+async function loadWooCommerceShippingClasses(userId) {
+    try {
+        console.log(`🚚 Loading WooCommerce shipping classes for user: ${userId}`);
+        
+        const credentials = await getUserCredentials(userId);
+        if (!credentials) {
+            return {
+                success: false,
+                error: 'User credentials not found. Please reconnect your store.'
+            };
+        }
+
+        const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
+        const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
+        
+        // Fetch all shipping classes from WooCommerce
+        const shippingClasses = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/shipping_classes', auth, { per_page: 100 });
+        
+        console.log(`✅ Loaded ${shippingClasses.length} shipping classes from WooCommerce`);
+        
+        return {
+            success: true,
+            shipping_classes: shippingClasses
+        };
+        
+    } catch (error) {
+        console.error(`❌ Error loading WooCommerce shipping classes:`, error);
         return {
             success: false,
             error: error.message
