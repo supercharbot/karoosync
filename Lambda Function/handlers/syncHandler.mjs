@@ -14,16 +14,26 @@ const CORS_HEADERS = {
     'Access-Control-Max-Age': '86400'
 };
 
-// Preserve description formatting
+// Preserve description formatting - Handle both HTML and plain text
 function preserveDescriptionFormatting(htmlContent) {
     if (!htmlContent) return '';
     
-    return htmlContent
-        .replace(/\r\n/g, '\n')
-        .replace(/\r/g, '\n')
-        .replace(/\n\s*\n/g, '\n\n')
-        .replace(/(\[\/vc_column_text\])(\s*)(\[\/vc_column\])(\s*)(\[\/vc_row\])/g, '$1\n$3\n$5')
-        .replace(/(\[vc_row\])(\s*)(\[vc_column\])(\s*)(\[vc_column_text\])/g, '$1\n$3\n$5');
+    const content = htmlContent.trim();
+    
+    // If content already contains HTML tags, preserve as-is
+    if (content.includes('<') && content.includes('>')) {
+        return content
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n')
+            .replace(/\n{3,}/g, '\n\n');
+    }
+    
+    // Convert plain text to HTML with line breaks
+    return `<p>${content
+        .replace(/\r\n/g, '<br>')
+        .replace(/\r/g, '<br>')
+        .replace(/\n/g, '<br>')
+    }</p>`;
 }
 
 // Generate UUID for WordPress auth and sync tracking
