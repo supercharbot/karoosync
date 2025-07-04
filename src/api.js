@@ -38,7 +38,8 @@ async function makeRequest(url, options = {}) {
 export async function checkUserData(authToken) {
   console.log('🔍 Checking user data...');
   
-  const result = await makeRequest(`${API_ENDPOINT}?action=check-data`, {
+  const result = await makeRequest(`${API_ENDPOINT}?action=check-data&include_credentials=true`, {
+    method: 'GET',
     headers: { Authorization: `Bearer ${authToken}` }
   });
 

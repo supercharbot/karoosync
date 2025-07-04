@@ -14,26 +14,56 @@ const CORS_HEADERS = {
     'Access-Control-Max-Age': '86400'
 };
 
-// Preserve description formatting - Handle both HTML and plain text
+// Preserve description formatting - Handle both HTML and plain text with full formatting preservation
 function preserveDescriptionFormatting(htmlContent) {
     if (!htmlContent) return '';
     
-    const content = htmlContent.trim();
+    let content = htmlContent.trim();
     
-    // If content already contains HTML tags, preserve as-is
+    // If content contains HTML tags, preserve all formatting
     if (content.includes('<') && content.includes('>')) {
-        return content
+        // Normalize line endings but preserve all HTML structure and formatting
+        content = content
             .replace(/\r\n/g, '\n')
             .replace(/\r/g, '\n')
-            .replace(/\n{3,}/g, '\n\n');
+            // Preserve paragraph breaks by normalizing excessive newlines
+            .replace(/\n{3,}/g, '\n\n')
+            // Clean up whitespace around HTML tags while preserving structure
+            .replace(/>\s+</g, '><')
+            // Ensure proper spacing after block elements
+            .replace(/(<\/(?:p|div|h[1-6]|ul|ol|li|blockquote|pre)>)(?!\s*<)/gi, '$1\n')
+            // Remove any orphaned closing paragraph tags that might cause issues
+            .replace(/^\s*<\/p>/gi, '')
+            // Ensure we don't have unclosed paragraph tags
+            .replace(/<p([^>]*)>([^<]*(?:<(?!\/p>)[^<]*)*)<\/p>/gi, '<p$1>$2</p>');
+        
+        // If content doesn't start with a block element, wrap in paragraph
+        if (!/^\s*<(?:p|div|h[1-6]|ul|ol|blockquote|pre|table)/i.test(content)) {
+            // Check if it's just inline content that needs wrapping
+            if (!/<\/(?:p|div|h[1-6]|ul|ol|blockquote|pre|table)>/i.test(content)) {
+                content = `<p>${content}</p>`;
+            }
+        }
+        
+        return content;
     }
     
-    // Convert plain text to HTML with line breaks
-    return `<p>${content
-        .replace(/\r\n/g, '<br>')
-        .replace(/\r/g, '<br>')
-        .replace(/\n/g, '<br>')
-    }</p>`;
+    // For plain text content, convert to proper HTML with paragraph structure
+    // Split by double line breaks to create paragraphs
+    const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim());
+    
+    if (paragraphs.length === 0) return '';
+    
+    // Convert each paragraph, preserving single line breaks as <br> within paragraphs
+    const htmlParagraphs = paragraphs.map(para => {
+        const cleanPara = para.trim()
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n')
+            .replace(/\n/g, '<br>');
+        return `<p>${cleanPara}</p>`;
+    });
+    
+    return htmlParagraphs.join('\n');
 }
 
 // Generate UUID for WordPress auth and sync tracking
@@ -377,6 +407,93 @@ async function fetchAllVariations(baseUrl, auth, variableProducts, onProgress = 
     return allVariations;
 }
 
+// Fetch orders data for analytics
+async function fetchOrdersData(baseUrl, auth, onProgress = null) {
+    console.log('📊 Fetching orders data for analytics...');
+    const allOrders = [];
+    let page = 1;
+    const perPage = 100;
+    
+    // Fetch orders from last 365 days (configurable)
+    const dateFrom = new Date();
+    dateFrom.setDate(dateFrom.getDate() - 365);
+    const dateFromISO = dateFrom.toISOString();
+    
+    while (true) {
+        try {
+            console.log(`📄 Fetching orders page ${page}...`);
+            
+            const orders = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/orders', auth, {
+                page: page,
+                per_page: perPage,
+                after: dateFromISO,
+                orderby: 'date',
+                order: 'desc'
+            });
+            
+            if (!orders || orders.length === 0) {
+                console.log(`✅ No more orders found on page ${page}`);
+                break;
+            }
+            
+            // Process and add orders
+            const processedOrders = orders.map(order => ({
+                id: order.id,
+                number: order.number,
+                status: order.status,
+                currency: order.currency,
+                date_created: order.date_created,
+                date_modified: order.date_modified,
+                total: parseFloat(order.total) || 0,
+                subtotal: parseFloat(order.subtotal) || 0,
+                total_tax: parseFloat(order.total_tax) || 0,
+                shipping_total: parseFloat(order.shipping_total) || 0,
+                discount_total: parseFloat(order.discount_total) || 0,
+                payment_method: order.payment_method,
+                payment_method_title: order.payment_method_title,
+                customer_id: order.customer_id,
+                billing: {
+                    email: order.billing?.email || '',
+                    phone: order.billing?.phone || '',
+                    country: order.billing?.country || ''
+                },
+                line_items: (order.line_items || []).map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    product_id: item.product_id,
+                    variation_id: item.variation_id,
+                    quantity: item.quantity,
+                    price: parseFloat(item.price) || 0,
+                    total: parseFloat(item.total) || 0
+                }))
+            }));
+            
+            allOrders.push(...processedOrders);
+            
+            console.log(`✅ Loaded ${orders.length} orders from page ${page} (Total: ${allOrders.length})`);
+            
+            // Report progress
+            if (onProgress) {
+                onProgress(page / 10); // Estimate progress
+            }
+            
+            // Break if we got fewer orders than requested (last page)
+            if (orders.length < perPage) break;
+            page++;
+            
+            // Rate limiting
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+        } catch (error) {
+            console.error(`❌ Failed to fetch orders page ${page}:`, error.message);
+            break;
+        }
+    }
+    
+    console.log(`🎉 Total orders fetched: ${allOrders.length}`);
+    return allOrders;
+}
+
 // Comprehensive data extraction (no time limits)
 async function extractWooCommerceData(url, username, appPassword, userId, syncId) {
     console.log('🚀 Starting comprehensive WooCommerce data extraction...');
@@ -435,12 +552,27 @@ async function extractWooCommerceData(url, username, appPassword, userId, syncId
         });
         
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        // Fetch orders data for analytics
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 90,
+            message: 'Fetching orders data for analytics...'
+        });
+        
+        const orders = await fetchOrdersData(baseUrl, auth, (progress) => {
+            updateSyncStatus(userId, syncId, {
+                status: 'processing',
+                progress: 90 + (progress * 5), // 90-95%
+                message: `Fetching orders... (${Math.round(progress * 100)}%)`
+            });
+        });
         console.log(`✅ Comprehensive data extraction completed in ${totalTime}s`);
         
         return {
             products: products || [],
             variations: variations || [],
             categories: categories || [],
+            orders: orders || [],
             totalProducts: products.length + variations.length,
             extractedAt: new Date().toISOString(),
             extractionTime: totalTime,
@@ -746,6 +878,114 @@ function buildIndexes(normalizedData) {
     };
 }
 
+// Calculate analytics metrics from orders data
+function calculateAnalytics(orders) {
+    console.log('📊 Calculating analytics metrics...');
+    
+    if (!orders || orders.length === 0) {
+        return {
+            total_orders: 0,
+            total_revenue: 0,
+            avg_order_value: 0,
+            orders_this_month: 0,
+            revenue_this_month: 0,
+            top_products: [],
+            sales_by_status: {},
+            monthly_trends: [],
+            last_calculated: new Date().toISOString()
+        };
+    }
+    
+    const now = new Date();
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const completedOrders = orders.filter(order => 
+        ['completed', 'processing', 'on-hold'].includes(order.status)
+    );
+    
+    // Basic metrics
+    const totalOrders = completedOrders.length;
+    const totalRevenue = completedOrders.reduce((sum, order) => sum + order.total, 0);
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    
+    // This month metrics
+    const thisMonthOrders = completedOrders.filter(order => 
+        new Date(order.date_created) >= thisMonth
+    );
+    const ordersThisMonth = thisMonthOrders.length;
+    const revenueThisMonth = thisMonthOrders.reduce((sum, order) => sum + order.total, 0);
+    
+    // Top products by revenue
+    const productSales = {};
+    completedOrders.forEach(order => {
+        order.line_items.forEach(item => {
+            if (!productSales[item.product_id]) {
+                productSales[item.product_id] = {
+                    product_id: item.product_id,
+                    name: item.name,
+                    total_sold: 0,
+                    quantity_sold: 0,
+                    revenue: 0
+                };
+            }
+            productSales[item.product_id].total_sold += item.total;
+            productSales[item.product_id].quantity_sold += item.quantity;
+            productSales[item.product_id].revenue += item.total;
+        });
+    });
+    
+    const topProducts = Object.values(productSales)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+    
+    // Sales by status
+    const salesByStatus = {};
+    orders.forEach(order => {
+        if (!salesByStatus[order.status]) {
+            salesByStatus[order.status] = {
+                count: 0,
+                revenue: 0
+            };
+        }
+        salesByStatus[order.status].count++;
+        salesByStatus[order.status].revenue += order.total;
+    });
+    
+    // Monthly trends (last 12 months)
+    const monthlyTrends = [];
+    for (let i = 11; i >= 0; i--) {
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+        
+        const monthOrders = completedOrders.filter(order => {
+            const orderDate = new Date(order.date_created);
+            return orderDate >= monthStart && orderDate <= monthEnd;
+        });
+        
+        const monthRevenue = monthOrders.reduce((sum, order) => sum + order.total, 0);
+        
+        monthlyTrends.push({
+            month: monthStart.toISOString().substring(0, 7), // YYYY-MM
+            orders: monthOrders.length,
+            revenue: monthRevenue,
+            avg_order_value: monthOrders.length > 0 ? monthRevenue / monthOrders.length : 0
+        });
+    }
+    
+    console.log(`✅ Analytics calculated: ${totalOrders} orders, $${totalRevenue.toFixed(2)} revenue`);
+    
+    return {
+        total_orders: totalOrders,
+        total_revenue: Math.round(totalRevenue * 100) / 100, // Round to 2 decimal places
+        avg_order_value: Math.round(avgOrderValue * 100) / 100,
+        orders_this_month: ordersThisMonth,
+        revenue_this_month: Math.round(revenueThisMonth * 100) / 100,
+        top_products: topProducts,
+        sales_by_status: salesByStatus,
+        monthly_trends: monthlyTrends,
+        last_calculated: new Date().toISOString()
+    };
+}
+
 // Store all data in new S3 architecture
 async function storeInS3(userId, normalizedData, syncId) {
     console.log('💾 Storing data in new S3 architecture...');
@@ -760,6 +1000,8 @@ async function storeInS3(userId, normalizedData, syncId) {
         
         // Build indexes
         const indexes = buildIndexes(normalizedData);
+        // Calculate analytics from orders
+        const analytics = calculateAnalytics(normalizedData.orders || []);
         
         // Prepare all files for upload
         const files = [
@@ -778,6 +1020,16 @@ async function storeInS3(userId, normalizedData, syncId) {
                 data: {
                     ...normalizedData.categories,
                     last_updated: timestamp
+                }
+            },
+            // Analytics data files
+            {
+                key: `users/${userId}/analytics/orders.json.gz`,
+                data: {
+                    orders: normalizedData.orders || [],
+                    total_count: (normalizedData.orders || []).length,
+                    last_updated: timestamp,
+                    sync_version: '2.0'
                 }
             },
             
@@ -807,6 +1059,14 @@ async function storeInS3(userId, normalizedData, syncId) {
                         total_products: Object.keys(normalizedData.products).length,
                         total_categories: Object.keys(normalizedData.categories.categories).length
                     },
+                    analytics_info: {
+                        total_orders: analytics.total_orders,
+                        total_revenue: analytics.total_revenue,
+                        avg_order_value: analytics.avg_order_value,
+                        orders_this_month: analytics.orders_this_month,
+                        revenue_this_month: analytics.revenue_this_month,
+                        last_analytics_sync: timestamp
+                    },
                     sync_status: {
                         last_sync: timestamp,
                         sync_version: '2.0',
@@ -814,6 +1074,11 @@ async function storeInS3(userId, normalizedData, syncId) {
                     },
                     architecture_version: '2.0'
                 }
+            },
+            // Analytics summary file
+            {
+                key: `users/${userId}/analytics/summary.json.gz`,
+                data: analytics
             }
         ];
         

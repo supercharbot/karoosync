@@ -460,6 +460,12 @@ const ProductPreview = ({ editData, activeImageIndex, navigateImage, product, is
           </div>
         )}
         
+        {editData.description && (
+          <div className="prose prose-gray dark:prose-invert max-w-none mb-6">
+            <div dangerouslySetInnerHTML={{ __html: editData.description }} />
+          </div>
+        )}
+        
         <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-2">
           <p className="text-sm text-gray-600 dark:text-gray-400">
             <span className="font-medium">SKU:</span> {editData.sku || 'N/A'}

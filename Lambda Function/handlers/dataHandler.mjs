@@ -206,6 +206,21 @@ async function checkUserData(userId) {
         const metadataCompressed = await metadataResponse.Body.transformToByteArray();
         const storeMetadata = JSON.parse(zlib.gunzipSync(metadataCompressed).toString());
         
+        // Load analytics data
+        let analyticsData = null;
+        try {
+            const analyticsResponse = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/analytics/summary.json.gz`
+            }));
+            
+            const analyticsCompressed = await analyticsResponse.Body.transformToByteArray();
+            analyticsData = JSON.parse(zlib.gunzipSync(analyticsCompressed).toString());
+            console.log(`📊 Analytics data loaded: ${analyticsData.total_orders} orders, $${analyticsData.total_revenue} revenue`);
+        } catch (analyticsError) {
+            console.log('📊 No analytics data found (this is normal for older syncs)');
+        }
+        
         // Check for other essential files to verify complete sync
         const essentialFiles = [
             'products.json.gz',
@@ -267,10 +282,11 @@ async function checkUserData(userId) {
                 ...storeMetadata,
                 categories: categories,
                 totalProducts: storeMetadata.store_info?.total_products || 0,
-                totalCategories: categories.length, // Use actual loaded categories count
+                totalCategories: storeMetadata.store_info?.total_categories || 0,
                 lastSync: storeMetadata.sync_status?.last_sync,
                 architectureVersion: storeMetadata.architecture_version || '2.0'
-            }
+            },
+            analytics: analyticsData
         };
         
         console.log(`✅ User data found - ${storeMetadata.store_info?.total_products || 0} products across ${Object.keys(categoriesData.categories || {}).length} categories`);

@@ -7,6 +7,17 @@ import ProductEditor from './ProductEditor';
 import SettingsPage from './SettingsPage';
 import ProfilePage from './ProfilePage';
 
+// Helper function to extract store name from URL
+const extractStoreName = (url) => {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname;
+  } catch (error) {
+    // If URL parsing fails, try basic string extraction
+    return url.replace(/^https?:\/\//, '').split('/')[0];
+  }
+};
+
 const MainLayout = ({ userData, onReset, onStartResync }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
@@ -43,6 +54,11 @@ const MainLayout = ({ userData, onReset, onStartResync }) => {
               </div>
               <span className="text-lg lg:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 KarooSync
+                {userData?.credentials?.url && (
+                  <span className="hidden lg:inline">
+                    {` | ${extractStoreName(userData.credentials.url)}`}
+                  </span>
+                )}
               </span>
             </div>
           </div>
