@@ -339,6 +339,23 @@ async function updateProductInS3Categories(userId, productId, updatedProduct) {
     }
 }
 
+async function loadProductFromS3(userId, productId) {
+    try {
+        const response = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/products.json.gz`
+        }));
+        
+        const compressedData = await response.Body.transformToByteArray();
+        const productsData = JSON.parse(zlib.gunzipSync(compressedData).toString());
+        
+        return productsData.products[parseInt(productId)] || {};
+    } catch (error) {
+        console.error('Failed to load product from S3:', error);
+        return {};
+    }
+}
+
 async function updateRegularProduct(userId, productId, productData) {
     try {
         const credentials = await getUserCredentials(userId);
@@ -437,6 +454,7 @@ async function updateVariableProduct(userId, productId, productData) {
             );
         }
 
+        // Clean up undefined and empty values for parent
         Object.keys(parentData).forEach(key => {
             if (parentData[key] === undefined) {
                 delete parentData[key];
@@ -462,39 +480,66 @@ async function updateVariableProduct(userId, productId, productData) {
                     }
 
                     const variationUpdateData = {
-                    // Pricing
-                    regular_price: variation.regular_price || '',
-                    sale_price: variation.sale_price || '',
-                    date_on_sale_from: variation.date_on_sale_from || '',
-                    date_on_sale_to: variation.date_on_sale_to || '',
-                    
-                    // Basic info
-                    sku: variation.sku || '',
-                    description: variation.description || '',
-                    status: variation.status || 'publish',
-                    
-                    // Product type toggles
-                    downloadable: variation.downloadable || false,
-                    virtual: variation.virtual || false,
-                    
-                    // Inventory
-                    manage_stock: variation.manage_stock || false,
-                    stock_status: variation.stock_status || 'instock',
-                    stock_quantity: variation.stock_quantity || null,
-                    backorders: variation.backorders || 'no',
-                    low_stock_amount: variation.low_stock_amount || null,
-                    
-                    // Shipping (will be ignored if virtual=true)
-                    weight: variation.weight || '',
-                    dimensions: variation.dimensions || { length: '', width: '', height: '' },
-                    shipping_class: variation.shipping_class || '',
-                    
-                    // Media
-                    image: variation.image || null,
-                    
-                    // Downloads (for downloadable variations)
-                    downloads: variation.downloads || []
-                };
+                        // Pricing
+                        regular_price: variation.regular_price || '',
+                        sale_price: variation.sale_price || '',
+                        date_on_sale_from: variation.date_on_sale_from || '',
+                        date_on_sale_to: variation.date_on_sale_to || '',
+                        
+                        // Basic info
+                        sku: variation.sku || '',
+                        description: variation.description ? variation.description.replace(/<\/?p>/g, '') : '',
+                        status: variation.status || 'publish',
+                        
+                        // Product type toggles
+                        downloadable: variation.downloadable || false,
+                        virtual: variation.virtual || false,
+                        
+                        // Inventory
+                        manage_stock: variation.manage_stock || false,
+                        stock_status: variation.stock_status || 'instock',
+                        stock_quantity: variation.stock_quantity || null,
+                        backorders: variation.backorders || 'no',
+                        low_stock_amount: variation.low_stock_amount || null,
+                        
+                        // Shipping (will be ignored if virtual=true)
+                        weight: variation.weight || '',
+                        dimensions: variation.dimensions || { length: '', width: '', height: '' },
+                        shipping_class: variation.shipping_class || '',
+                        
+                        // Media
+                        image: variation.image || null,
+                        
+                        // Downloads (for downloadable variations)
+                        downloads: variation.downloads || []
+                    };
+
+                    // CRITICAL FIX: Explicitly remove fields that shouldn't be on variations
+                    delete variationUpdateData.type;
+                    delete variationUpdateData.parent_id;
+                    delete variationUpdateData.id;
+                    delete variationUpdateData.permalink;
+                    delete variationUpdateData.date_created;
+                    delete variationUpdateData.date_modified;
+                    delete variationUpdateData.categories;
+                    delete variationUpdateData.tags;
+                    delete variationUpdateData.default_attributes;
+                    delete variationUpdateData.grouped_products;
+                    delete variationUpdateData.upsell_ids;
+                    delete variationUpdateData.cross_sell_ids;
+                    delete variationUpdateData.variations;
+
+                    // Clean up undefined and empty values for variation
+                    Object.keys(variationUpdateData).forEach(key => {
+                        if (variationUpdateData[key] === undefined) {
+                            delete variationUpdateData[key];
+                        }
+                        if (variationUpdateData[key] === '' && !['sale_price', 'regular_price'].includes(key)) {
+                            delete variationUpdateData[key];
+                        }
+                    });
+
+                    console.log(`🔄 Updating variation ${variation.id} with data:`, JSON.stringify(variationUpdateData, null, 2));
 
                     const updatedVariation = await makeWordPressRequest(
                         baseUrl, 
@@ -514,8 +559,27 @@ async function updateVariableProduct(userId, productId, productData) {
             }
         }
 
-        // 3. Update S3 cache
-        await updateProductInS3Categories(userId, productId, updatedParent);
+        // 3. Get original product data from S3 to preserve all variations
+        const originalProductData = await loadProductFromS3(userId, productId);
+        const allVariations = originalProductData.variations || [];
+
+        // Update only the changed variations
+        variationResults.forEach(result => {
+            if (result.success) {
+                const index = allVariations.findIndex(v => v.id === result.id);
+                if (index !== -1) {
+                    allVariations[index] = result.data;
+                }
+            }
+        });
+
+        const completeProductData = {
+            ...updatedParent,
+            variations: allVariations
+        };
+
+        // Update S3 cache with complete data
+        await updateProductInS3Categories(userId, productId, completeProductData);
 
         console.log(`🔄 Variable product update complete. Parent: ✅, Variations: ${variationResults.filter(r => r.success).length}/${variationResults.length}`);
 

@@ -52,6 +52,7 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
     status: ''
   });
   const [bulkFeedback, setBulkFeedback] = useState('');
+  const [changedVariations, setChangedVariations] = useState(new Set());
 
   useEffect(() => {
     loadProductVariations();
@@ -119,6 +120,7 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
         ? { ...variation, [field]: value }
         : variation
     ));
+    setChangedVariations(prev => new Set([...prev, variationId]));
   };
 
   const handleDimensionChange = (variationId, dimension, value) => {
@@ -207,6 +209,7 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
       ));
     };
     reader.readAsDataURL(file);
+    setChangedVariations(prev => new Set([...prev, variationId]));
   };
 
   const handleVariationImageUrl = (variationId, url) => {
@@ -233,6 +236,7 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
         ? { ...variation, image: null }
         : variation
     ));
+    setChangedVariations(prev => new Set([...prev, variationId]));
   };
 
   const handleBulkInputChange = (field, value) => {
@@ -346,7 +350,17 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
 
   const handleSave = async () => {
     setSaving(true);
-    setSaveStatus('Saving variations...');
+    
+    const variationsToUpdate = variations.filter(v => changedVariations.has(v.id));
+    
+    if (variationsToUpdate.length === 0) {
+      setSaveStatus('No changes to save');
+      setSaving(false);
+      setTimeout(() => setSaveStatus(''), 3000);
+      return;
+    }
+    
+    setSaveStatus(`Saving ${variationsToUpdate.length} changed variation${variationsToUpdate.length > 1 ? 's' : ''}...`);
     
     try {
       const token = await getAuthToken();
@@ -356,30 +370,31 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
         return;
       }
 
-      let successCount = 0;
-      const totalCount = variations.length;
+      // Send parent product update with changed variations
+      const parentProductData = {
+        ...product,
+        type: 'variable',
+        variations: variationsToUpdate
+      };
 
-      // Update each variation
-      for (const variation of variations) {
-        try {
-          const result = await updateProduct(variation.id, variation, token);
-          if (result.success) {
-            successCount++;
-          }
-        } catch (err) {
-          console.error(`Failed to update variation ${variation.id}:`, err);
-        }
-      }
-
-      if (successCount === totalCount) {
-        setSaveStatus(`Successfully updated all ${totalCount} variations`);
+      const result = await updateProduct(product.id, parentProductData, token);
+      
+      if (result.success) {
+        const successCount = result.variationResults?.filter(r => r.success).length || 0;
+        
+        // Clear changed variations on success
+        setChangedVariations(new Set());
+        
+        setSaveStatus(`Successfully updated ${successCount}/${variationsToUpdate.length} variation${successCount > 1 ? 's' : ''}`);
         setTimeout(() => setSaveStatus(''), 4000);
       } else {
-        setSaveStatus(`Updated ${successCount}/${totalCount} variations`);
+        setSaveStatus(`Error: ${result.error || 'Update failed'}`);
         setTimeout(() => setSaveStatus(''), 4000);
       }
+      
     } catch (err) {
       setSaveStatus(`Error: ${err.message}`);
+      setTimeout(() => setSaveStatus(''), 4000);
     }
     
     setSaving(false);
