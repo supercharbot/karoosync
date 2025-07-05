@@ -454,16 +454,47 @@ async function updateVariableProduct(userId, productId, productData) {
         if (productData.variations && productData.variations.length > 0) {
             for (const variation of productData.variations) {
                 try {
+                    // Process variation image if it's a file upload (base64)
+                    if (variation.image && variation.image.src && variation.image.src.startsWith('data:')) {
+                        console.log(`🖼️ Processing variation image for ${variation.id}...`);
+                        const processedImages = await processProductImages([variation.image], baseUrl, auth, `Variation ${variation.id}`);
+                        variation.image = processedImages[0];
+                    }
+
                     const variationUpdateData = {
-                        regular_price: variation.regular_price || '',
-                        sale_price: variation.sale_price || '',
-                        sku: variation.sku || '',
-                        manage_stock: variation.manage_stock || false,
-                        stock_status: variation.stock_status || 'instock',
-                        weight: variation.weight || '',
-                        dimensions: variation.dimensions || { length: '', width: '', height: '' },
-                        image: variation.image || null
-                    };
+                    // Pricing
+                    regular_price: variation.regular_price || '',
+                    sale_price: variation.sale_price || '',
+                    date_on_sale_from: variation.date_on_sale_from || '',
+                    date_on_sale_to: variation.date_on_sale_to || '',
+                    
+                    // Basic info
+                    sku: variation.sku || '',
+                    description: variation.description || '',
+                    status: variation.status || 'publish',
+                    
+                    // Product type toggles
+                    downloadable: variation.downloadable || false,
+                    virtual: variation.virtual || false,
+                    
+                    // Inventory
+                    manage_stock: variation.manage_stock || false,
+                    stock_status: variation.stock_status || 'instock',
+                    stock_quantity: variation.stock_quantity || null,
+                    backorders: variation.backorders || 'no',
+                    low_stock_amount: variation.low_stock_amount || null,
+                    
+                    // Shipping (will be ignored if virtual=true)
+                    weight: variation.weight || '',
+                    dimensions: variation.dimensions || { length: '', width: '', height: '' },
+                    shipping_class: variation.shipping_class || '',
+                    
+                    // Media
+                    image: variation.image || null,
+                    
+                    // Downloads (for downloadable variations)
+                    downloads: variation.downloads || []
+                };
 
                     const updatedVariation = await makeWordPressRequest(
                         baseUrl, 
