@@ -130,6 +130,7 @@ const ProductEditor = ({ userData, onReset }) => {
         <CategoryView
           userData={userData}
           onCategorySelect={handleCategorySelect}
+          onProductSelect={handleProductSelect}
           onDataUpdate={handleDataUpdate}
         />
       )}
