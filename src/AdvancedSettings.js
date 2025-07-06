@@ -245,7 +245,7 @@ const [showUpsellSearch, setShowUpsellSearch] = useState(false);
             <button
               onClick={fetchExistingTags}
               disabled={loadingTags}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
             >
               {loadingTags ? 'Loading...' : 'Choose Existing Tag'}
             </button>
@@ -340,7 +340,7 @@ const [showUpsellSearch, setShowUpsellSearch] = useState(false);
             <button
               onClick={fetchExistingAttributes}
               disabled={loadingAttributes}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
             >
               {loadingAttributes ? 'Loading...' : 'Choose Existing Attribute'}
             </button>

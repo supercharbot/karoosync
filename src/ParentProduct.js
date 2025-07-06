@@ -196,9 +196,8 @@ const ParentProduct = ({ product, onBack, onProductUpdate }) => {
       </div>
 
       {/* Tab Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeMainTab === 'parent-product' && (
-          <ParentProductContent
+      {activeMainTab === 'parent-product' && (
+        <ParentProductContent
             editData={editData}
             handleInputChange={handleInputChange}
             handleImageAdd={handleImageAdd}
@@ -216,14 +215,15 @@ const ParentProduct = ({ product, onBack, onProductUpdate }) => {
           />
         )}
         
-        {activeMainTab === 'variations' && (
+      {activeMainTab === 'variations' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <VariableProductView
             product={product}
             onBack={() => setActiveMainTab('parent-product')}
             onProductUpdate={onProductUpdate}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -246,7 +246,7 @@ const ParentProductContent = ({
   saveStatus 
 }) => {
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full lg:max-w-7xl lg:mx-auto lg:px-4 lg:sm:px-6 lg:lg:px-8 lg:py-8">
       {/* Mobile Tab Navigation */}
       <div className="lg:hidden mb-6">
         <div className="flex bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
