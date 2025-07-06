@@ -474,31 +474,37 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
             className="p-4 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             onClick={() => setShowBulkActions(!showBulkActions)}
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
               <div className="flex items-center">
-                <Zap className="w-5 h-5 text-blue-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bulk Actions</h3>
-                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                <Zap className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bulk Actions</h3>
+                  <span className="text-sm text-gray-500 dark:text-gray-400 block sm:hidden">
+                    Apply to all variations
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between sm:justify-end space-x-2">
+                <span className="hidden sm:inline text-sm text-gray-500 dark:text-gray-400">
                   Apply changes to all variations
                 </span>
-              </div>
-              <div className="flex items-center space-x-3">
                 {showBulkActions && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       applyAllBulkChanges();
                     }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors text-sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg flex items-center transition-colors text-sm font-medium"
                   >
-                    <Check className="w-4 h-4 mr-2" />
-                    Apply All Changes
+                    <Check className="w-4 h-4 mr-1 sm:mr-2" />
+                    <span className="hidden xs:inline">Apply All</span>
+                    <span className="xs:hidden">Apply</span>
                   </button>
                 )}
                 {showBulkActions ? (
-                  <ChevronUp className="w-5 h-5 text-gray-400" />
+                  <ChevronUp className="w-5 h-5 text-gray-400 flex-shrink-0" />
                 ) : (
-                  <ChevronDown className="w-5 h-5 text-gray-400" />
+                  <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />
                 )}
               </div>
             </div>
@@ -511,7 +517,7 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
               {bulkFeedback && (
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3 rounded-lg">
                   <div className="flex items-center">
-                    <Check className="w-4 h-4 text-green-600 mr-2" />
+                    <Check className="w-4 h-4 text-green-600 mr-2 flex-shrink-0" />
                     <span className="text-sm text-green-700 dark:text-green-400">{bulkFeedback}</span>
                   </div>
                 </div>
@@ -520,25 +526,25 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
               {/* Bulk Pricing Section */}
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                 <h4 className="text-base font-medium text-gray-900 dark:text-gray-100 flex items-center mb-3">
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Bulk Pricing
+                  <DollarSign className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span className="truncate">Bulk Pricing</span>
                 </h4>
                 
                 <SaleSettings 
                   editData={bulkData}
                   handleInputChange={handleBulkInputChange}
-                  isMobile={false}
+                  isMobile={true}
                 />
               </div>
 
               {/* Bulk Inventory Section */}
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                 <h4 className="text-base font-medium text-gray-900 dark:text-gray-100 flex items-center mb-3">
-                  <Package className="w-4 h-4 mr-2" />
-                  Bulk Inventory
+                  <Package className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span className="truncate">Bulk Inventory</span>
                 </h4>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Stock Status
@@ -549,9 +555,9 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
                     >
                       <option value="">Select status...</option>
-                      <option value="instock">In Stock</option>
-                      <option value="outofstock">Out of Stock</option>
-                      <option value="onbackorder">On Backorder</option>
+                      <option value="instock">In stock</option>
+                      <option value="outofstock">Out of stock</option>
+                      <option value="onbackorder">On backorder</option>
                     </select>
                   </div>
                   
@@ -564,20 +570,20 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
                       value={bulkData.stock_quantity}
                       onChange={(e) => handleBulkInputChange('stock_quantity', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-                      placeholder="Stock quantity"
+                      placeholder="Quantity"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Bulk Shipping & Status */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Bulk Shipping & Status - Mobile Stacked */}
+              <div className="space-y-4 sm:grid sm:grid-cols-1 lg:grid-cols-2 sm:gap-4 sm:space-y-0">
                 
                 {/* Bulk Shipping */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                   <h4 className="text-base font-medium text-gray-900 dark:text-gray-100 flex items-center mb-3">
-                    <Truck className="w-4 h-4 mr-2" />
-                    Bulk Shipping
+                    <Truck className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">Bulk Shipping</span>
                   </h4>
                   
                   <div className="space-y-3">
@@ -618,8 +624,8 @@ const VariableProductView = ({ product, onBack, onProductUpdate }) => {
                 {/* Bulk Status */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                   <h4 className="text-base font-medium text-gray-900 dark:text-gray-100 flex items-center mb-3">
-                    <Users className="w-4 h-4 mr-2" />
-                    Bulk Status
+                    <Users className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">Bulk Status</span>
                   </h4>
                   
                   <div>
