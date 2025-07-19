@@ -223,141 +223,121 @@ async function updateSyncStatus(userId, syncId, statusUpdate) {
     }
 }
 
-// Fetch all products with comprehensive pagination
 async function fetchAllProducts(baseUrl, auth, onProgress = null) {
-    console.log('🛒 Starting comprehensive product fetch...');
+    console.log('🔄 Starting fetchAllProducts with API approach testing...');
     const allProducts = [];
-    let page = 1;
-    let hasLoggedStructure = false;
     
-    while (page <= 500) { // Increased limit
+    // Test different API approaches to find one that works
+    const apiApproaches = [
+        { 
+            name: "Minimal parameters",
+            params: { per_page: 50 },
+            perPage: 50
+        },
+        { 
+            name: "Published products only",
+            params: { page: 1, per_page: 100, status: 'publish' },
+            perPage: 100
+        },
+        { 
+            name: "All products (no status filter)",
+            params: { page: 1, per_page: 100 },
+            perPage: 100
+        }
+    ];
+    
+    let workingApproach = null;
+    
+    // Test each approach until we find one that returns an array
+    for (let i = 0; i < apiApproaches.length; i++) {
+        const approach = apiApproaches[i];
+        console.log(`🧪 Testing approach ${i + 1}: ${approach.name}`);
+        
+        try {
+            const testResponse = await makeWordPressRequest(
+                baseUrl, 
+                '/wp-json/wc/v3/products', 
+                auth, 
+                approach.params
+            );
+            
+            console.log(`📊 Response type: ${typeof testResponse}, Is array: ${Array.isArray(testResponse)}, Length: ${testResponse?.length || 'N/A'}`);
+            
+            if (testResponse && Array.isArray(testResponse) && testResponse.length > 0) {
+                console.log(`✅ SUCCESS! Approach "${approach.name}" returned ${testResponse.length} products`);
+                workingApproach = approach;
+                allProducts.push(...testResponse);
+                break;
+            }
+            
+        } catch (error) {
+            console.error(`❌ Approach "${approach.name}" failed:`, error.message);
+        }
+    }
+    
+    if (!workingApproach) {
+        console.error('❌ All API approaches failed to return products');
+        return [];
+    }
+    
+    console.log(`🚀 Using working approach: "${workingApproach.name}"`);
+    
+    // Now use the working approach for pagination
+    let page = 2; // Start from page 2 since we got page 1 already
+    
+    while (page <= 50) {
         console.log(`📄 Fetching products page ${page}...`);
         
         try {
-            // Try multiple API approaches for categories
-            const products = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {
-                page,
-                per_page: 100, // Increased from 20
-                status: 'any',
-                _embed: true,
-                context: 'edit' // Request full edit context for more data
-            });
+            const pageParams = {
+                ...workingApproach.params,
+                page: page
+            };
             
-            if (!products || products.length === 0) break;
+            const products = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, pageParams);
             
-            // DEBUG: Log structure once
-            if (!hasLoggedStructure && products[0]) {
-                console.log('🔍 Raw WordPress product structure:', JSON.stringify(products[0], null, 2));
-                hasLoggedStructure = true;
-                
-                // Log available fields
-                const fields = Object.keys(products[0]);
-                console.log('🔍 Available product fields:', fields);
-                
-                // Check for category-related fields
-                const categoryFields = fields.filter(field => 
-                    field.toLowerCase().includes('cat') || 
-                    field.toLowerCase().includes('term') ||
-                    field.toLowerCase().includes('tax')
-                );
-                console.log('🔍 Category-related fields found:', categoryFields);
+            // Check if we got no products (end reached)
+            if (!products || !Array.isArray(products) || products.length === 0) {
+                console.log(`✅ End reached: Page ${page} returned 0 products`);
+                break;
             }
             
-            // Enhanced category extraction for each product
-            const enhancedProducts = products.map(product => {
-                let extractedCategories = [];
-                
-                // Method 1: Standard categories field
-                if (product.categories && Array.isArray(product.categories)) {
-                    extractedCategories = product.categories;
-                    console.log(`📂 Product ${product.id} - Standard categories:`, extractedCategories);
-                }
-                
-                // Method 2: Check _embedded data
-                else if (product._embedded && product._embedded['wp:term']) {
-                    const terms = product._embedded['wp:term'].flat();
-                    extractedCategories = terms.filter(term => term.taxonomy === 'product_cat');
-                    console.log(`📂 Product ${product.id} - Embedded categories:`, extractedCategories);
-                }
-                
-                // Method 3: Check _links for category relations
-                else if (product._links && product._links['wp:term']) {
-                    console.log(`📂 Product ${product.id} - Found category links, may need separate fetch`);
-                }
-                
-                // Method 4: Check for custom category fields
-                const customCatFields = ['product_cat', 'product_category', 'categories_ids'];
-                for (const field of customCatFields) {
-                    if (product[field]) {
-                        console.log(`📂 Product ${product.id} - Found custom category field '${field}':`, product[field]);
-                        break;
-                    }
-                }
-                
-                return {
-                    ...product,
-                    _debug_categories: extractedCategories // Keep for debugging
-                };
-            });
+            // Check if we got the same products (duplicate page)
+            const currentProductIds = products.map(p => p.id);
+            const isAllDuplicates = currentProductIds.every(id => 
+                allProducts.some(existingProduct => existingProduct.id === id)
+            );
             
-            allProducts.push(...enhancedProducts);
-            console.log(`✅ Page ${page}: Loaded ${products.length} products (total: ${allProducts.length})`);
+            if (isAllDuplicates && page > 2) {
+                console.log(`✅ End reached: Page ${page} contains duplicate products`);
+                break;
+            }
             
-            // Progress reporting
+            // Add products
+            allProducts.push(...products);
+            
             if (onProgress) {
-                onProgress(Math.min(page / 100, 0.6)); // Products = 60% of total progress
+                onProgress(0.1 + (page / 50) * 0.5);
             }
             
-            // Stop if we got fewer products than requested (last page)
-            if (products.length < 100) break;
-            page++;
+            console.log(`✅ Page ${page}: ${products.length} products loaded, total: ${allProducts.length}`);
             
-            // Rate limiting
+            // Traditional end detection
+            if (products.length < workingApproach.perPage) {
+                console.log(`✅ End reached: Page ${page} has ${products.length} < ${workingApproach.perPage} products`);
+                break;
+            }
+            
+            page++;
             await new Promise(resolve => setTimeout(resolve, 150));
             
         } catch (error) {
             console.error(`❌ Failed to fetch products page ${page}:`, error.message);
-            
-            // Try alternative endpoint if main fails
-            if (page === 1) {
-                console.log('🔄 Trying alternative products endpoint...');
-                try {
-                    const altProducts = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {
-                        page: 1,
-                        per_page: 10,
-                        status: 'publish' // Try just published products
-                    });
-                    
-                    if (altProducts && altProducts.length > 0) {
-                        console.log('🔍 Alternative endpoint product structure:', JSON.stringify(altProducts[0], null, 2));
-                    }
-                } catch (altError) {
-                    console.error('❌ Alternative endpoint also failed:', altError.message);
-                }
-            }
-            
             break;
         }
     }
     
     console.log(`🎉 Total products fetched: ${allProducts.length}`);
-    
-    // Final category analysis
-    const productsWithCategories = allProducts.filter(p => 
-        (p.categories && p.categories.length > 0) || 
-        (p._debug_categories && p._debug_categories.length > 0)
-    );
-    
-    console.log(`📊 Products with categories: ${productsWithCategories.length}/${allProducts.length}`);
-    
-    if (productsWithCategories.length === 0) {
-        console.warn('⚠️ NO PRODUCTS HAVE CATEGORIES - This suggests:');
-        console.warn('   1. WooCommerce API permissions issue');
-        console.warn('   2. Products genuinely have no categories assigned');
-        console.warn('   3. Categories stored in non-standard field');
-        console.warn('   4. Plugin/theme modifying API response');
-    }
-    
     return allProducts;
 }
 
@@ -365,19 +345,36 @@ async function fetchAllProducts(baseUrl, auth, onProgress = null) {
 async function fetchAllVariations(baseUrl, auth, variableProducts, onProgress = null) {
     console.log(`🔄 Fetching variations for ${variableProducts.length} variable products...`);
     const allVariations = [];
+    const startTime = Date.now();
+    const MAX_VARIATIONS_TIME = 300000; // 5 minutes max for variations
     
     for (let i = 0; i < variableProducts.length; i++) {
         const product = variableProducts[i];
         
+        // TIMEOUT PROTECTION: Check if we've been running too long
+        const elapsed = Date.now() - startTime;
+        if (elapsed > MAX_VARIATIONS_TIME) {
+            console.warn(`⏰ TIMEOUT PROTECTION: Variations fetch stopped after ${elapsed/1000}s at product ${i+1}/${variableProducts.length}`);
+            console.warn(`⏰ Collected ${allVariations.length} variations so far - continuing sync without remaining variations`);
+            break;
+        }
+        
         try {
-            console.log(`📄 Fetching variations for product ${product.id} (${i + 1}/${variableProducts.length})...`);
+            console.log(`📄 Fetching variations for product ${product.id} (${i + 1}/${variableProducts.length}) - ${Math.round(elapsed/1000)}s elapsed`);
             
-            const variations = await makeWordPressRequest(
+            // Add timeout to individual request
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Individual variation request timeout')), 30000) // 30 sec per product
+            );
+            
+            const fetchPromise = makeWordPressRequest(
                 baseUrl, 
                 `/wp-json/wc/v3/products/${product.id}/variations`, 
                 auth, 
                 { per_page: 100 }
             );
+            
+            const variations = await Promise.race([fetchPromise, timeoutPromise]);
             
             if (variations && variations.length > 0) {
                 const enhancedVariations = variations.map(variation => ({
@@ -387,23 +384,33 @@ async function fetchAllVariations(baseUrl, auth, variableProducts, onProgress = 
                 }));
                 
                 allVariations.push(...enhancedVariations);
-                console.log(`✅ Loaded ${variations.length} variations for product ${product.id}`);
+                console.log(`✅ Loaded ${variations.length} variations for product ${product.id} (Total: ${allVariations.length})`);
+            } else {
+                console.log(`📄 No variations found for product ${product.id}`);
             }
             
-            // Report progress if callback provided
+            // Report progress
             if (onProgress) {
-                onProgress(0.6 + (i / variableProducts.length) * 0.2); // Variations = 20% of total progress
+                onProgress(0.6 + (i / variableProducts.length) * 0.2);
             }
             
-            // Rate limiting
-            await new Promise(resolve => setTimeout(resolve, 150));
+            // Shorter rate limiting to speed up process
+            await new Promise(resolve => setTimeout(resolve, 100));
             
         } catch (error) {
             console.error(`⚠️ Failed to fetch variations for product ${product.id}:`, error.message);
+            
+            // CONTINUE WITH NEXT PRODUCT instead of stopping
+            if (error.message.includes('timeout')) {
+                console.warn(`⚠️ Timeout on product ${product.id} - skipping to next product`);
+            }
+            continue; // Important: continue to next product
         }
     }
     
-    console.log(`🎉 Total variations fetched: ${allVariations.length}`);
+    const totalTime = Math.round((Date.now() - startTime) / 1000);
+    console.log(`🎉 Variations fetch completed in ${totalTime}s: ${allVariations.length} total variations from ${variableProducts.length} variable products`);
+    
     return allVariations;
 }
 
@@ -1120,7 +1127,6 @@ async function storeInS3(userId, normalizedData, syncId) {
     }
 }
 
-// Background sync processor (handles async invocation)
 async function processBackgroundSync(event) {
     const { userId, syncId, credentials } = event;
     const { url, username, appPassword } = credentials;
@@ -1129,9 +1135,31 @@ async function processBackgroundSync(event) {
     console.log(`📍 Store URL: ${url}`);
     
     try {
-        // Perform comprehensive sync
+        // RESTART PREVENTION: Check if already completed
+        try {
+            const existingStatus = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/sync-status.json`
+            }));
+            const status = JSON.parse(await existingStatus.Body.transformToString());
+            if (status.status === 'completed') {
+                console.log('✅ RESTART PREVENTION: Sync already completed, exiting');
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ success: true, message: 'Already completed' })
+                };
+            }
+        } catch (e) {
+            console.log('📝 No existing completed status, proceeding...');
+        }
+
+        // STEP 1: Extract data
+        console.log('🔄 STEP 1: Starting data extraction...');
         const rawData = await extractWooCommerceData(url, username, appPassword, userId, syncId);
-        
+        console.log(`✅ STEP 1 COMPLETE: ${rawData.products.length} products, ${rawData.variations.length} variations, ${rawData.orders.length} orders`);
+
+        // STEP 2: Normalize data  
+        console.log('🔄 STEP 2: Starting data normalization...');
         await updateSyncStatus(userId, syncId, {
             status: 'processing',
             progress: 85,
@@ -1139,10 +1167,21 @@ async function processBackgroundSync(event) {
         });
         
         const normalizedData = normalizeWooCommerceData(rawData);
+        console.log(`✅ STEP 2 COMPLETE: Normalized ${Object.keys(normalizedData.products).length} products`);
+
+        // STEP 3: Store in S3
+        console.log('🔄 STEP 3: Starting S3 storage...');
+        await updateSyncStatus(userId, syncId, {
+            status: 'processing',
+            progress: 90,
+            message: 'Storing data in cloud...'
+        });
         
         const storeResult = await storeInS3(userId, normalizedData, syncId);
-        
-        // Store credentials
+        console.log('✅ STEP 3 COMPLETE: Data stored in S3');
+
+        // STEP 4: Store credentials
+        console.log('🔄 STEP 4: Storing credentials...');
         const credentialsData = { url, username, appPassword };
         await s3Client.send(new PutObjectCommand({
             Bucket: BUCKET_NAME,
@@ -1151,12 +1190,14 @@ async function processBackgroundSync(event) {
             ContentType: 'application/json',
             ContentEncoding: 'gzip'
         }));
-        
-        // Update final status
+        console.log('✅ STEP 4 COMPLETE: Credentials stored');
+
+        // STEP 5: Mark as completed
+        console.log('🔄 STEP 5: Marking sync as completed...');
         await updateSyncStatus(userId, syncId, {
             status: 'completed',
             progress: 100,
-            message: 'Sync completed successfully',
+            message: 'Sync completed successfully!',
             completedAt: new Date().toISOString(),
             result: {
                 ...storeResult,
@@ -1169,10 +1210,17 @@ async function processBackgroundSync(event) {
             }
         });
         
-        console.log('🎉 Background sync completed successfully');
+        console.log('🎉 ALL STEPS COMPLETE: Background sync finished successfully');
+        
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ success: true, message: 'Background sync completed' })
+        };
         
     } catch (error) {
-        console.error('❌ Background sync failed:', error);
+        console.error('❌ SYNC FAILED AT SOME STEP:', error);
+        console.error('❌ Error details:', error.message);
+        console.error('❌ Stack trace:', error.stack);
         
         await updateSyncStatus(userId, syncId, {
             status: 'failed',
@@ -1181,6 +1229,12 @@ async function processBackgroundSync(event) {
             failedAt: new Date().toISOString(),
             error: error.message
         });
+        
+        // Return error response instead of throwing to prevent AWS retry
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ success: false, error: error.message })
+        };
     }
 }
 
