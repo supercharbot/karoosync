@@ -1,25 +1,10 @@
 import React from 'react';
-import { Package, ShoppingCart, TrendingUp, Clock, DollarSign } from 'lucide-react';
+import { Package, ShoppingCart, TrendingUp, Clock } from 'lucide-react';
 
 const Dashboard = ({ userData }) => {
   const totalProducts = userData?.metadata?.totalProducts || 0;
-  const totalCategories = userData?.metadata?.totalCategories || 0;
-  const lastSync = userData?.metadata?.lastSync ? new Date(userData.metadata.lastSync).toLocaleDateString() : 'Never';
-
-  // Analytics data
-  const analytics = userData?.analytics || {};
-  const totalRevenue = analytics.total_revenue || 0;
-  const totalOrders = analytics.total_orders || 0;
-  const avgOrderValue = analytics.avg_order_value || 0;
-  const ordersThisMonth = analytics.orders_this_month || 0;
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
+  const totalCategories = userData?.metadata?.categories?.length || 0;
+  const lastSync = userData?.metadata?.cachedAt ? new Date(userData.metadata.cachedAt).toLocaleDateString() : 'Never';
 
   const stats = [
     {
@@ -35,28 +20,16 @@ const Dashboard = ({ userData }) => {
       color: 'bg-green-500'
     },
     {
-      name: 'Total Revenue',
-      value: formatCurrency(totalRevenue),
-      icon: TrendingUp,
-      color: 'bg-emerald-500'
-    },
-    {
-      name: 'Total Orders',
-      value: totalOrders,
+      name: 'Last Sync',
+      value: lastSync,
       icon: Clock,
       color: 'bg-purple-500'
     },
     {
-      name: 'Avg Order Value',
-      value: formatCurrency(avgOrderValue),
+      name: 'Status',
+      value: 'Connected',
       icon: TrendingUp,
       color: 'bg-orange-500'
-    },
-    {
-      name: 'Orders This Month',
-      value: ordersThisMonth,
-      icon: Clock,
-      color: 'bg-pink-500'
     }
   ];
 
@@ -68,7 +41,7 @@ const Dashboard = ({ userData }) => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (

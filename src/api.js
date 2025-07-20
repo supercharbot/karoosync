@@ -464,3 +464,15 @@ export async function loadWooCommerceShippingClasses(authToken) {
 
   return result;
 }
+
+export async function createProduct(productData, authToken) {
+  console.log('➕ Creating product:', productData.name);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=create-product`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(productData)
+  });
+
+  return result;
+}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Image, Search, X, Plus, Grid, List, MoreHorizontal, Edit, Trash2, Settings, Copy, Archive } from 'lucide-react';
+import CreateProductForm from './CreateProductForm';
 import { useAuth } from './AuthContext';
 import { loadCategoryProducts, searchProducts, deleteCategory, updateCategory, duplicateProduct, deleteProduct, updateProduct } from './api';
 import LoadingScreen from './LoadingScreen';
@@ -16,6 +17,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateProductModal, setShowCreateProductModal] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(null);
   const [productMenuOpen, setProductMenuOpen] = useState(null);
@@ -510,7 +512,10 @@ const handleArchiveProduct = async (product, e) => {
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm">
+          <button 
+            onClick={() => setShowCreateProductModal(true)}
+            className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Create Product
           </button>
@@ -648,6 +653,23 @@ const handleArchiveProduct = async (product, e) => {
           <p className="text-red-600">{error}</p>
         </div>
       )}
+
+      {/* Create Product Modal */}
+      <CreateProductForm
+        isOpen={showCreateProductModal}
+        onClose={() => setShowCreateProductModal(false)}
+        onProductCreated={(product) => {
+          setShowCreateProductModal(false);
+          if (onDataUpdate) {
+            onDataUpdate();
+          }
+          // Refresh current view
+          if (selectedCategory) {
+            loadProducts();
+          }
+        }}
+        selectedCategory={selectedCategory}
+      />
     </div>
   );
 };

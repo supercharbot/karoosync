@@ -47,21 +47,82 @@ const WysiwygEditor = ({
   const [isHTMLMode, setIsHTMLMode] = useState(false);
   const [htmlContent, setHtmlContent] = useState('');
 
+  // Properly format content for the editor
+  const formatContentForEditor = (content) => {
+    if (!content) return '';
+    
+    let formattedContent = content.trim();
+    
+    // If content is plain text (no HTML tags), convert line breaks to paragraphs
+    if (!formattedContent.includes('<') || !formattedContent.includes('>')) {
+      // Split by double line breaks to create paragraphs
+      const paragraphs = formattedContent.split(/\n\s*\n/).filter(p => p.trim());
+      if (paragraphs.length > 0) {
+        formattedContent = paragraphs.map(para => {
+          const cleanPara = para.trim().replace(/\n/g, '<br>');
+          return `<p>${cleanPara}</p>`;
+        }).join('\n');
+      } else {
+        // Single paragraph
+        formattedContent = `<p>${formattedContent.replace(/\n/g, '<br>')}</p>`;
+      }
+    } else {
+      // Content has HTML - ensure proper paragraph structure
+      // If doesn't start with block element, wrap in paragraph
+      if (!/^\s*<(?:p|div|h[1-6]|ul|ol|blockquote|pre|table)/i.test(formattedContent)) {
+        formattedContent = `<p>${formattedContent}</p>`;
+      }
+      
+      // Normalize excessive line breaks but preserve intentional spacing
+      formattedContent = formattedContent
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/(<\/(?:p|div|h[1-6]|ul|ol|li|blockquote|pre)>)\s*(?!\s*<)/gi, '$1\n');
+    }
+    
+    return formattedContent;
+  };
+
+  // Extract clean content from editor (preserve paragraph structure)
+  const extractCleanContent = () => {
+    if (!editorRef.current) return '';
+    
+    const content = editorRef.current.innerHTML;
+    
+    // Clean up content but preserve essential formatting
+    let cleanContent = content
+      // Remove empty paragraphs and divs
+      .replace(/<p[^>]*>\s*<\/p>/gi, '')
+      .replace(/<div[^>]*>\s*<\/div>/gi, '')
+      // Normalize whitespace
+      .replace(/\s+/g, ' ')
+      // Clean up paragraph spacing
+      .replace(/(<\/p>)\s*(<p[^>]*>)/gi, '$1\n$2')
+      // Remove browser-added elements
+      .replace(/<br\s*\/?>\s*<\/p>/gi, '</p>')
+      .replace(/<p[^>]*>\s*<br\s*\/?>/gi, '<p>')
+      .trim();
+    
+    return cleanContent;
+  };
+
   // Initialize content when value changes
   useEffect(() => {
     if (editorRef.current && !isPreviewMode && !isHTMLMode) {
+      const formattedContent = formatContentForEditor(value);
       const currentContent = editorRef.current.innerHTML;
-      if (currentContent !== value) {
-        editorRef.current.innerHTML = value || '';
+      
+      // Only update if content actually changed to avoid cursor jumping
+      if (currentContent !== formattedContent) {
+        editorRef.current.innerHTML = formattedContent;
       }
     }
   }, [value, isPreviewMode, isHTMLMode]);
 
-  // Handle content changes
+  // Handle content changes with proper formatting preservation
   const handleInput = useCallback(() => {
     if (editorRef.current && onChange && !isHTMLMode) {
-      const content = editorRef.current.innerHTML;
-      onChange(content);
+      const cleanContent = extractCleanContent();
+      onChange(cleanContent);
     }
   }, [onChange, isHTMLMode]);
 
@@ -80,26 +141,49 @@ const WysiwygEditor = ({
     handleInput();
   };
 
-  // Handle paste with formatting preservation
+  // Enhanced paste handling with better formatting preservation
   const handlePaste = (e) => {
     e.preventDefault();
     const clipboardData = e.clipboardData || window.clipboardData;
-    const pastedData = clipboardData.getData('text/html') || clipboardData.getData('text/plain');
+    const pastedHtml = clipboardData.getData('text/html');
+    const pastedText = clipboardData.getData('text/plain');
     
-    if (pastedData) {
-      // Clean up pasted HTML but preserve formatting
-      const cleanHtml = pastedData
+    let contentToInsert = '';
+    
+    if (pastedHtml) {
+      // Clean up pasted HTML but preserve paragraphs
+      contentToInsert = pastedHtml
         .replace(/<script[^>]*>.*?<\/script>/gi, '')
         .replace(/<style[^>]*>.*?<\/style>/gi, '')
         .replace(/on\w+="[^"]*"/gi, '')
         .replace(/style="[^"]*"/gi, (match) => {
-          // Keep only safe styles
           const safeStyles = match.match(/(font-weight|font-style|text-decoration|color|background-color|text-align|font-size|font-family):[^;]+/gi);
           return safeStyles ? `style="${safeStyles.join(';')}"` : '';
         });
-      
-      document.execCommand('insertHTML', false, cleanHtml);
+    } else if (pastedText) {
+      // Convert plain text to proper HTML with paragraphs
+      const paragraphs = pastedText.split(/\n\s*\n/).filter(p => p.trim());
+      if (paragraphs.length > 1) {
+        contentToInsert = paragraphs.map(para => {
+          const cleanPara = para.trim().replace(/\n/g, '<br>');
+          return `<p>${cleanPara}</p>`;
+        }).join('');
+      } else {
+        contentToInsert = pastedText.replace(/\n/g, '<br>');
+      }
+    }
+    
+    if (contentToInsert) {
+      document.execCommand('insertHTML', false, contentToInsert);
       handleInput();
+    }
+  };
+
+  // Handle Enter key for proper paragraph breaks
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      // Let the browser handle it for now, but we could customize this
+      setTimeout(handleInput, 10);
     }
   };
 
@@ -120,7 +204,6 @@ const WysiwygEditor = ({
         document.execCommand('insertHTML', false, `<a href="${linkUrl}" target="_blank" rel="noopener noreferrer">${linkText}</a>`);
       } else {
         document.execCommand('createLink', false, linkUrl);
-        // Add target="_blank" and rel attributes
         const links = editorRef.current.querySelectorAll('a[href="' + linkUrl + '"]');
         links.forEach(link => {
           link.setAttribute('target', '_blank');
@@ -137,15 +220,13 @@ const WysiwygEditor = ({
   // Toggle HTML/Visual mode
   const toggleHTMLMode = () => {
     if (isHTMLMode) {
-      // Switch back to visual mode
       if (editorRef.current) {
-        editorRef.current.innerHTML = htmlContent;
+        editorRef.current.innerHTML = formatContentForEditor(htmlContent);
         handleInput();
       }
       setIsHTMLMode(false);
     } else {
-      // Switch to HTML mode
-      const currentHtml = editorRef.current ? editorRef.current.innerHTML : value;
+      const currentHtml = editorRef.current ? extractCleanContent() : value;
       setHtmlContent(currentHtml);
       setIsHTMLMode(true);
     }
@@ -169,13 +250,12 @@ const WysiwygEditor = ({
     handleInput();
   };
 
-  // Apply text color
+  // Apply colors
   const applyTextColor = (color) => {
     executeCommand('foreColor', color);
     setShowColorPicker(false);
   };
 
-  // Apply background color
   const applyBackgroundColor = (color) => {
     executeCommand('backColor', color);
     setShowColorPicker(false);
@@ -185,12 +265,10 @@ const WysiwygEditor = ({
   const handleFormatChange = (format) => {
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
-      // First remove any existing block formatting
       if (format === 'p') {
         executeCommand('formatBlock', 'div');
         executeCommand('formatBlock', 'p');
       } else {
-        // For headings, clear formatting first then apply
         executeCommand('formatBlock', 'p');
         setTimeout(() => {
           executeCommand('formatBlock', format);
@@ -199,7 +277,7 @@ const WysiwygEditor = ({
     }
   };
 
-  // Format options for headings and paragraphs
+  // Format options
   const formatOptions = [
     { value: 'p', label: 'Paragraph', command: 'formatBlock' },
     { value: 'h1', label: 'Heading 1', command: 'formatBlock' },
@@ -211,7 +289,6 @@ const WysiwygEditor = ({
     { value: 'pre', label: 'Preformatted', command: 'formatBlock' }
   ];
 
-  // Font size options
   const fontSizeOptions = [
     { value: '1', label: '8pt' },
     { value: '2', label: '10pt' },
@@ -222,7 +299,6 @@ const WysiwygEditor = ({
     { value: '7', label: '36pt' }
   ];
 
-  // Common colors
   const colors = [
     '#000000', '#333333', '#666666', '#999999', '#CCCCCC', '#FFFFFF',
     '#FF0000', '#FF9900', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF',
@@ -272,7 +348,7 @@ const WysiwygEditor = ({
           </select>
 
           {/* Text Formatting */}
-          <div className="flex items-center gap-1 mr-2">
+          <div className="flex items-center border-r border-gray-200 dark:border-gray-600 pr-2 mr-2">
             <button type="button" onClick={() => executeCommand('bold')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors" title="Bold">
               <Bold className="w-4 h-4" />
             </button>
@@ -282,46 +358,13 @@ const WysiwygEditor = ({
             <button type="button" onClick={() => executeCommand('underline')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors" title="Underline">
               <Underline className="w-4 h-4" />
             </button>
-            <button type="button" onClick={() => executeCommand('strikeThrough')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors" title="Strikethrough">
+            <button type="button" onClick={() => executeCommand('strikethrough')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors" title="Strikethrough">
               <Strikethrough className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Color Picker */}
-          <div className="relative mr-2">
-            <button
-              type="button"
-              onClick={() => setShowColorPicker(!showColorPicker)}
-              className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
-              title="Text Color"
-            >
-              <Palette className="w-4 h-4" />
-            </button>
-            {showColorPicker && (
-              <div className="absolute top-full left-0 mt-1 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50">
-                <div className="grid grid-cols-6 gap-1 mb-2">
-                  {colors.map(color => (
-                    <button
-                      key={color}
-                      onClick={() => applyTextColor(color)}
-                      className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform"
-                      style={{ backgroundColor: color }}
-                      title={color}
-                    />
-                  ))}
-                </div>
-                <button
-                  onClick={() => setShowColorPicker(false)}
-                  className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100"
-                >
-                  Close
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* Alignment */}
-          <div className="flex items-center gap-1 mr-2">
+          <div className="flex items-center border-r border-gray-200 dark:border-gray-600 pr-2 mr-2">
             <button type="button" onClick={() => executeCommand('justifyLeft')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors" title="Align Left">
               <AlignLeft className="w-4 h-4" />
             </button>
@@ -337,7 +380,7 @@ const WysiwygEditor = ({
           </div>
 
           {/* Lists */}
-          <div className="flex items-center gap-1 mr-2">
+          <div className="flex items-center border-r border-gray-200 dark:border-gray-600 pr-2 mr-2">
             <button type="button" onClick={() => executeCommand('insertUnorderedList')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors" title="Bullet List">
               <List className="w-4 h-4" />
             </button>
@@ -352,7 +395,13 @@ const WysiwygEditor = ({
             </button>
           </div>
 
-          {/* Quote */}
+          {/* Links & Quote */}
+          <button type="button" onClick={insertLink} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors mr-1" title="Insert Link">
+            <Link className="w-4 h-4" />
+          </button>
+          <button type="button" onClick={() => executeCommand('unlink')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors mr-2" title="Remove Link">
+            <Unlink className="w-4 h-4" />
+          </button>
           <button type="button" onClick={() => executeCommand('formatBlock', 'blockquote')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors mr-2" title="Quote">
             <Quote className="w-4 h-4" />
           </button>
@@ -369,7 +418,6 @@ const WysiwygEditor = ({
 
           {/* Right-aligned controls */}
           <div className="ml-auto flex items-center gap-1">
-            {/* Undo/Redo */}
             <button type="button" onClick={() => executeCommand('undo')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors" title="Undo">
               <Undo className="w-4 h-4" />
             </button>
@@ -397,38 +445,59 @@ const WysiwygEditor = ({
               onClick={() => setIsPreviewMode(!isPreviewMode)}
               className={`p-1.5 rounded transition-colors ${
                 isPreviewMode 
-                  ? 'bg-blue-500 text-white' 
+                  ? 'bg-green-500 text-white' 
                   : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
               }`}
               title="Preview"
             >
               <Eye className="w-4 h-4" />
             </button>
-
-            {/* Toolbar Toggle */}
-            <button
-              type="button"
-              onClick={() => setShowToolbar(!showToolbar)}
-              className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
-              title="Toggle Toolbar"
-            >
-              <ChevronUp className="w-4 h-4" />
-            </button>
           </div>
         </div>
       )}
 
       {/* Advanced Toolbar */}
-      {showToolbar && showAdvancedToolbar && (
-        <div className="border-b border-gray-200 dark:border-gray-600 p-2 flex flex-wrap items-center gap-1 bg-gray-50 dark:bg-gray-800">
-          {/* Link Tools */}
-          <div className="flex items-center gap-1 mr-2">
-            <button type="button" onClick={insertLink} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors" title="Insert Link">
-              <Link className="w-4 h-4" />
+      {showAdvancedToolbar && (
+        <div className="border-b border-gray-200 dark:border-gray-600 p-2 flex flex-wrap items-center gap-1">
+          {/* Color Picker */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowColorPicker(!showColorPicker)}
+              className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors mr-2"
+              title="Text Color"
+            >
+              <Palette className="w-4 h-4" />
             </button>
-            <button type="button" onClick={() => executeCommand('unlink')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors" title="Remove Link">
-              <Unlink className="w-4 h-4" />
-            </button>
+            {showColorPicker && (
+              <div className="absolute top-full left-0 z-10 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg p-2 mt-1">
+                <div className="grid grid-cols-6 gap-1 mb-2">
+                  {colors.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => applyTextColor(color)}
+                      className="w-6 h-6 rounded border border-gray-300 dark:border-gray-600 hover:scale-110 transition-transform"
+                      style={{ backgroundColor: color }}
+                      title={`Text Color: ${color}`}
+                    />
+                  ))}
+                </div>
+                <div className="border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Background Color:</p>
+                  <div className="grid grid-cols-6 gap-1">
+                    {colors.map(color => (
+                      <button
+                        key={`bg-${color}`}
+                        onClick={() => applyBackgroundColor(color)}
+                        className="w-6 h-6 rounded border border-gray-300 dark:border-gray-600 hover:scale-110 transition-transform"
+                        style={{ backgroundColor: color }}
+                        title={`Background Color: ${color}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Table */}
@@ -518,6 +587,7 @@ const WysiwygEditor = ({
             contentEditable
             onInput={handleInput}
             onPaste={handlePaste}
+            onKeyDown={handleKeyDown}
             className={`p-4 outline-none focus:ring-0 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
             style={{ minHeight }}
             data-placeholder={placeholder}
@@ -535,6 +605,17 @@ const WysiwygEditor = ({
           }
           .dark [contenteditable]:empty:before {
             color: #6B7280;
+          }
+          
+          /* Paragraph spacing */
+          [contenteditable] p {
+            margin: 1em 0;
+          }
+          [contenteditable] p:first-child {
+            margin-top: 0;
+          }
+          [contenteditable] p:last-child {
+            margin-bottom: 0;
           }
           
           /* Enhanced blockquote styling */
@@ -609,47 +690,17 @@ const WysiwygEditor = ({
             border: 1px solid #D1D5DB;
             border-radius: 4px;
             padding: 12px;
-            font-family: 'Courier New', monospace;
+            margin: 12px 0;
             overflow-x: auto;
-            white-space: pre-wrap;
-            margin: 16px 0;
+            font-family: 'Courier New', monospace;
           }
           .dark [contenteditable] pre {
-            background-color: #1F2937;
+            background-color: #374151;
             border-color: #4B5563;
             color: #E5E7EB;
           }
-          
-          /* Link styles */
-          [contenteditable] a {
-            color: #3B82F6;
-            text-decoration: underline;
-          }
-          [contenteditable] a:hover {
-            color: #1D4ED8;
-          }
-          .dark [contenteditable] a {
-            color: #60A5FA;
-          }
-          .dark [contenteditable] a:hover {
-            color: #93C5FD;
-          }
         `}</style>
       </div>
-
-      {/* Collapsed Toolbar Indicator */}
-      {!showToolbar && (
-        <div className="border-t border-gray-200 dark:border-gray-600 p-1 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setShowToolbar(true)}
-            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            title="Show Toolbar"
-          >
-            <ChevronDown className="w-4 h-4" />
-          </button>
-        </div>
-      )}
     </div>
   );
 };

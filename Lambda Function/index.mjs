@@ -105,6 +105,7 @@ export const handler = async (event) => {
         
         // Product operations: PUT requests and category management
         if (event.httpMethod === 'PUT' ||
+            (event.httpMethod === 'POST' && action === 'create-product') ||
             (event.httpMethod === 'POST' && action === 'create-category') ||
             (event.httpMethod === 'POST' && action === 'duplicate-product') ||
             (event.httpMethod === 'DELETE' && action === 'delete-category') ||

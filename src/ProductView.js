@@ -8,6 +8,21 @@ import AdvancedSettings from './AdvancedSettings';
 
 const ProductView = ({ product, onBack, onProductUpdate }) => {
   const { getAuthToken } = useAuth();
+  
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      div.product-description p[dangerouslySetInnerHTML] p,
+      .product-description p,
+      [class*="product-description"] p {
+        margin-bottom: 16px !important;
+        margin-top: 0px !important;
+        display: block !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
   const [activeTab, setActiveTab] = useState('preview');
   const [editData, setEditData] = useState({
     // Basic Information
@@ -455,14 +470,14 @@ const ProductPreview = ({ editData, activeImageIndex, navigateImage, product, is
         </div>
         
         {editData.short_description && (
-          <div className="prose prose-gray dark:prose-invert max-w-none mb-6">
-            <div dangerouslySetInnerHTML={{ __html: editData.short_description }} />
+          <div className="mb-6 text-gray-900 dark:text-gray-100 product-description">
+            <div dangerouslySetInnerHTML={{ __html: editData.short_description?.replace(/<p>/g, '<p style="margin-bottom: 1rem;">') }} />
           </div>
         )}
         
         {editData.description && (
-          <div className="prose prose-gray dark:prose-invert max-w-none mb-6">
-            <div dangerouslySetInnerHTML={{ __html: editData.description }} />
+          <div className="mb-6 text-gray-900 dark:text-gray-100 product-description">
+            <div dangerouslySetInnerHTML={{ __html: editData.description?.replace(/<p>/g, '<p style="margin-bottom: 1rem;">') }} />
           </div>
         )}
         

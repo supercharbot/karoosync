@@ -791,7 +791,169 @@ async function processNewAttributes(baseUrl, auth, attributes) {
     return processedAttributes;
 }
 
+async function createProductInWooCommerce(url, username, appPassword, productData) {
+    const baseUrl = url.startsWith('http') ? url : `https://${url}`;
+    const auth = Buffer.from(`${username}:${appPassword}`).toString('base64');
+    
+    return makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {}, 'POST', productData);
+}
+
+async function createVariationsInWooCommerce(url, username, appPassword, productId, variations) {
+    const baseUrl = url.startsWith('http') ? url : `https://${url}`;
+    const auth = Buffer.from(`${username}:${appPassword}`).toString('base64');
+    
+    for (const variation of variations) {
+        await makeWordPressRequest(
+            baseUrl, 
+            `/wp-json/wc/v3/products/${productId}/variations`, 
+            auth, 
+            {}, 
+            'POST', 
+            variation
+        );
+    }
+}
+
 export async function handleProduct(event, userId) {
+    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'create-product') {
+        console.log('➕ Create product request received');
+        
+        let productData;
+        try {
+            productData = JSON.parse(event.body || '{}');
+            console.log(`🔍 DEBUGGING: Product data received:`, JSON.stringify(productData, null, 2));
+        } catch (parseError) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Invalid JSON in request body' })
+            };
+        }
+        
+        if (!productData.name || !productData.name.trim()) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Product name is required' })
+            };
+        }
+        
+        try {
+            const credentials = await getUserCredentials(userId);
+            if (!credentials) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'User credentials not found' })
+                };
+            }
+            
+            // Process attributes if they exist (for variable products)
+            if (productData.attributes && productData.attributes.length > 0) {
+                productData.attributes = await processNewAttributes(
+                    credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`,
+                    Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64'),
+                    productData.attributes
+                );
+            }
+            
+            // Convert string values to proper types for WooCommerce API
+            const processedProductData = {
+                ...productData,
+                stock_quantity: productData.stock_quantity ? parseInt(productData.stock_quantity) : null,
+                regular_price: productData.regular_price ? parseFloat(productData.regular_price).toString() : '',
+                sale_price: productData.sale_price ? parseFloat(productData.sale_price).toString() : '',
+                weight: productData.weight ? parseFloat(productData.weight).toString() : '',
+                menu_order: productData.menu_order ? parseInt(productData.menu_order) : 0,
+                download_limit: productData.download_limit ? parseInt(productData.download_limit) : -1,
+                download_expiry: productData.download_expiry ? parseInt(productData.download_expiry) : -1,
+                // Clean images array - remove empty URLs and ensure valid format
+                images: (productData.images || [])
+                    .filter(img => img && img.src && img.src.trim() && img.src.startsWith('http'))
+                    .map(img => ({ src: img.src.trim(), alt: img.alt || '' }))
+            };
+
+            const newProduct = await createProductInWooCommerce(
+                credentials.url,
+                credentials.username,
+                credentials.appPassword,
+                processedProductData
+            );
+            
+            console.log(`🔍 DEBUGGING: Created product:`, JSON.stringify(newProduct, null, 2));
+            console.log(`🔍 DEBUGGING: Original product data categories:`, JSON.stringify(productData.categories));
+            
+            // If variable product, create variations
+            if (productData.type === 'variable' && productData.variations) {
+                await createVariationsInWooCommerce(
+                    credentials.url,
+                    credentials.username,
+                    credentials.appPassword,
+                    newProduct.id,
+                    productData.variations
+                );
+            }
+            
+            // Add new product to S3 storage
+            try {
+                console.log(`🔄 Adding new product ${newProduct.id} to S3 storage`);
+                
+                const response = await s3Client.send(new GetObjectCommand({
+                    Bucket: BUCKET_NAME,
+                    Key: `users/${userId}/products.json.gz`
+                }));
+                
+                const compressedData = await response.Body.transformToByteArray();
+                const productsData = JSON.parse(zlib.gunzipSync(compressedData).toString());
+                
+                // Add new product to products object
+                const numericProductId = parseInt(newProduct.id);
+                productsData.products[numericProductId] = newProduct;
+                productsData.lastUpdated = new Date().toISOString();
+                
+                console.log(`📝 Adding product ${numericProductId} to products data`);
+                
+                // Save back to S3
+                const updatedJson = JSON.stringify(productsData);
+                const compressedUpdated = zlib.gzipSync(updatedJson);
+                
+                await s3Client.send(new PutObjectCommand({
+                    Bucket: BUCKET_NAME,
+                    Key: `users/${userId}/products.json.gz`,
+                    Body: compressedUpdated,
+                    ContentType: 'application/json',
+                    ContentEncoding: 'gzip'
+                }));
+                
+                console.log(`✅ Successfully added new product ${newProduct.id} to S3 storage`);
+            } catch (s3Error) {
+                console.error(`❌ Failed to add new product ${newProduct.id} to S3:`, s3Error);
+                console.error('S3 Error details:', s3Error.message);
+                // Don't fail the entire request if S3 update fails
+            }
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    success: true, 
+                    product: newProduct 
+                })
+            };
+            
+        } catch (error) {
+            console.error('Product creation error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    success: false,
+                    error: error.message
+                })
+            };
+        }
+    }
+
     if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'create-category') {
         console.log('📝 Create category request received');
         
