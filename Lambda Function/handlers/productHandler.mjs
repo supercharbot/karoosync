@@ -653,22 +653,69 @@ async function updateMetadataAfterCategoryChange(userId) {
         const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
         
         const categories = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/categories', auth, { per_page: 100 });
+        const timestamp = new Date().toISOString();
         
-        const metadataResponse = await s3Client.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: `users/${userId}/metadata.json.gz`
-        }));
+        // Update categories.json.gz with proper structure
+        const categoriesData = {
+            categories: {},
+            last_updated: timestamp
+        };
         
-        const compressedMetadata = await metadataResponse.Body.transformToByteArray();
-        const metadata = JSON.parse(zlib.gunzipSync(compressedMetadata).toString());
-        
-        metadata.categories = categories || [];
-        metadata.lastUpdated = new Date().toISOString();
+        // Convert categories array to object format keyed by ID
+        if (categories && categories.length > 0) {
+            categories.forEach(category => {
+                categoriesData.categories[category.id] = {
+                    id: category.id,
+                    name: category.name,
+                    slug: category.slug,
+                    parent_id: category.parent || 0,
+                    description: category.description || '',
+                    count: category.count || 0
+                };
+            });
+        }
         
         await s3Client.send(new PutObjectCommand({
             Bucket: BUCKET_NAME,
-            Key: `users/${userId}/metadata.json.gz`,
-            Body: zlib.gzipSync(JSON.stringify(metadata)),
+            Key: `users/${userId}/categories.json.gz`,
+            Body: zlib.gzipSync(JSON.stringify(categoriesData)),
+            ContentType: 'application/json',
+            ContentEncoding: 'gzip'
+        }));
+        
+        // Update store-metadata.json.gz
+        let storeMetadata;
+        try {
+            const metadataResponse = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/store-metadata.json.gz`
+            }));
+            
+            const compressedMetadata = await metadataResponse.Body.transformToByteArray();
+            storeMetadata = JSON.parse(zlib.gunzipSync(compressedMetadata).toString());
+        } catch (error) {
+            // If store-metadata doesn't exist, create basic structure
+            storeMetadata = {
+                store_info: {
+                    total_products: 0,
+                    total_categories: categories ? categories.length : 0
+                },
+                sync_status: {
+                    last_sync: timestamp,
+                    status: 'completed'
+                },
+                architecture_version: '2.0'
+            };
+        }
+        
+        // Update store metadata with new category count
+        storeMetadata.store_info.total_categories = categories ? categories.length : 0;
+        storeMetadata.sync_status.last_sync = timestamp;
+        
+        await s3Client.send(new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/store-metadata.json.gz`,
+            Body: zlib.gzipSync(JSON.stringify(storeMetadata)),
             ContentType: 'application/json',
             ContentEncoding: 'gzip'
         }));
