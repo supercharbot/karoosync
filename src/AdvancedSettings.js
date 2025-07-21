@@ -3,7 +3,7 @@ import { X, Plus } from 'lucide-react';
 import { loadWooCommerceTags, loadWooCommerceAttributes, searchProducts } from './api';
 import { useAuth } from './AuthContext';
 
-const AdvancedSettings = ({ editData, handleInputChange, isMobile = false }) => {
+const AdvancedSettings = ({ editData, handleInputChange, isMobile, isCreating = false }) => {
   const { getAuthToken } = useAuth();
   // State for input fields
   const [tagInput, setTagInput] = useState('');
@@ -632,11 +632,15 @@ const [showUpsellSearch, setShowUpsellSearch] = useState(false);
             <select
               value={editData.type}
               onChange={(e) => handleInputChange('type', e.target.value)}
-              className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
+              disabled={isCreating}
+              className={`w-full px-4 ${isMobile ? 'py-4' : 'py-3'} border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${isCreating ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed opacity-60' : 'bg-white dark:bg-gray-700'} text-gray-900 dark:text-gray-100 ${isMobile ? 'text-base' : ''}`}
             >
               <option value="simple">Simple Product</option>
               <option value="variable">Variable Product</option>
             </select>
+            {isCreating && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Product type cannot be changed during creation</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

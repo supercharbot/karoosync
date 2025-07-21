@@ -111,8 +111,8 @@ const WysiwygEditor = ({
       const formattedContent = formatContentForEditor(value);
       const currentContent = editorRef.current.innerHTML;
       
-      // Only update if content actually changed to avoid cursor jumping
-      if (currentContent !== formattedContent) {
+      // Only update if content actually changed and editor is not focused to avoid cursor jumping
+      if (currentContent !== formattedContent && document.activeElement !== editorRef.current) {
         editorRef.current.innerHTML = formattedContent;
       }
     }
@@ -121,8 +121,12 @@ const WysiwygEditor = ({
   // Handle content changes with proper formatting preservation
   const handleInput = useCallback(() => {
     if (editorRef.current && onChange && !isHTMLMode) {
-      const cleanContent = extractCleanContent();
-      onChange(cleanContent);
+      // Debounce the onChange to prevent cursor jumping
+      const timer = setTimeout(() => {
+        const cleanContent = extractCleanContent();
+        onChange(cleanContent);
+      }, 10);
+      return () => clearTimeout(timer);
     }
   }, [onChange, isHTMLMode]);
 

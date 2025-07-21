@@ -182,16 +182,19 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
 
   const steps = getSteps();
 
-  // Auto-generate slug from name
+  // Track if slug was manually edited
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+
+  // Auto-generate slug from name only if not manually edited
   useEffect(() => {
-    if (productData.name && !productData.slug) {
+    if (productData.name && !slugManuallyEdited) {
       const slug = productData.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
       setProductData(prev => ({ ...prev, slug }));
     }
-  }, [productData.name]);
+  }, [productData.name, slugManuallyEdited]);
 
   // Update product type
   useEffect(() => {
@@ -200,6 +203,10 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
 
   const handleInputChange = (field, value) => {
     setProductData(prev => ({ ...prev, [field]: value }));
+    // Track if slug was manually edited
+    if (field === 'slug') {
+      setSlugManuallyEdited(true);
+    }
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
@@ -511,6 +518,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
               editData={productData}
               handleInputChange={handleInputChange}
               isMobile={false}
+              isCreating={true}
             />
           </div>
         );

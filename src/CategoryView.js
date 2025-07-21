@@ -4,7 +4,7 @@ import CreateProductForm from './CreateProductForm';
 import { useAuth } from './AuthContext';
 import { loadCategoryProducts, searchProducts, deleteCategory, updateCategory, duplicateProduct, deleteProduct, updateProduct } from './api';
 import LoadingScreen from './LoadingScreen';
-import CreateCategoryModal from './CreateCategoryModal';
+import MasterModal from './MasterModal';
 
 const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductSelect, onBack, onDataUpdate, parentCategoryName }) => {
   const { getAuthToken } = useAuth();
@@ -16,8 +16,8 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
   const [searchMode, setSearchMode] = useState('categories');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCreateProductModal, setShowCreateProductModal] = useState(false);
+  const [modalConfig, setModalConfig] = useState({ isOpen: false, action: '', item: null });
   const [viewMode, setViewMode] = useState('grid');
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(null);
   const [productMenuOpen, setProductMenuOpen] = useState(null);
@@ -138,8 +138,15 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     onProductSelect(product);
   };
 
-  const handleCategoryCreated = (newCategory) => {
-    setShowCreateModal(false);
+  const handleCreateCategory = () => {
+    setModalConfig({ isOpen: true, action: 'create-category', item: null });
+  };
+
+  const handleModalClose = () => {
+    setModalConfig({ isOpen: false, action: '', item: null });
+  };
+
+  const handleModalSuccess = () => {
     if (onDataUpdate) {
       onDataUpdate();
     }
@@ -153,42 +160,13 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
   const handleEditCategory = (category, e) => {
     e.stopPropagation();
     setCategoryMenuOpen(null);
-    console.log('Edit category:', category);
+    setModalConfig({ isOpen: true, action: 'edit-category', item: category });
   };
 
-  const handleDeleteCategory = async (category, e) => {
+  const handleDeleteCategory = (category, e) => {
     e.stopPropagation();
     setCategoryMenuOpen(null);
-    
-    if (!window.confirm(`Are you sure you want to delete the category "${category.name}"? This action cannot be undone.`)) {
-      return;
-    }
-
-    setOperationLoading(`delete-category-${category.id}`);
-    
-    try {
-      const authToken = await getAuthToken();
-      const result = await deleteCategory(category.id, authToken);
-      
-      if (result.success) {
-        if (onDataUpdate) {
-          onDataUpdate();
-        }
-      } else {
-        setError(result.error || 'Failed to delete category');
-      }
-    } catch (error) {
-      console.error('Delete category error:', error);
-      setError(error.message);
-    }
-    
-    setOperationLoading(null);
-  };
-
-  const handleConfigureCategory = (category, e) => {
-    e.stopPropagation();
-    setCategoryMenuOpen(null);
-    console.log('Configure category:', category);
+    setModalConfig({ isOpen: true, action: 'delete-category', item: category });
   };
 
   // Product Menu Handlers
@@ -293,11 +271,13 @@ const handleArchiveProduct = async (product, e) => {
   if (!selectedCategory) {
     return (
       <div className="p-4 lg:p-6 bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-64px)] lg:min-h-[calc(100vh-73px)]">
-        <CreateCategoryModal
-          isOpen={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
-          onCategoryCreated={handleCategoryCreated}
+        <MasterModal
+          isOpen={modalConfig.isOpen}
+          onClose={handleModalClose}
+          action={modalConfig.action}
+          item={modalConfig.item}
           parentCategories={userData?.metadata?.categories || []}
+          onSuccess={handleModalSuccess}
         />
         
         {/* Header */}
@@ -308,7 +288,7 @@ const handleArchiveProduct = async (product, e) => {
           
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={handleCreateCategory}
               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -417,13 +397,6 @@ const handleArchiveProduct = async (product, e) => {
                             Edit Category
                           </button>
                           <button
-                            onClick={(e) => handleConfigureCategory(category, e)}
-                            className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                          >
-                            <Settings className="w-4 h-4 mr-2" />
-                            Configure
-                          </button>
-                          <button
                             onClick={(e) => handleDeleteCategory(category, e)}
                             className="w-full flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                           >
@@ -461,7 +434,7 @@ const handleArchiveProduct = async (product, e) => {
               Your store doesn't have any categories yet.
             </p>
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={handleCreateCategory}
               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
               <Plus className="w-4 h-4 mr-2" />

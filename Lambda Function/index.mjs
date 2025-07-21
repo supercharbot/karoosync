@@ -108,6 +108,7 @@ export const handler = async (event) => {
             (event.httpMethod === 'POST' && action === 'create-product') ||
             (event.httpMethod === 'POST' && action === 'create-category') ||
             (event.httpMethod === 'POST' && action === 'duplicate-product') ||
+            (event.httpMethod === 'PUT' && action === 'update-category') ||
             (event.httpMethod === 'DELETE' && action === 'delete-category') ||
             (event.httpMethod === 'DELETE' && action === 'delete-product')) {
             console.log('🛍️ Routing to Product handler');

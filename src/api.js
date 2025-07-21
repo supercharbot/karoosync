@@ -205,6 +205,18 @@ export async function createCategory(categoryData, authToken) {
   return result;
 }
 
+export async function updateCategory(categoryId, categoryData, authToken) {
+  console.log(`📝 Updating category: ${categoryId}`);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=update-category&categoryId=${categoryId}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(categoryData)
+  });
+
+  return result;
+}
+
 export async function deleteCategory(categoryId, authToken) {
   console.log(`🗑️ Deleting category: ${categoryId}`);
   

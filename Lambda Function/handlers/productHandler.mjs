@@ -685,6 +685,78 @@ async function createTagInWooCommerce(baseUrl, auth, tagData) {
     return makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/tags', auth, {}, 'POST', tagData);
 }
 
+async function updateCategoryInWooCommerce(url, username, appPassword, categoryId, categoryData) {
+    const baseUrl = url.startsWith('http') ? url : `https://${url}`;
+    const auth = Buffer.from(`${username}:${appPassword}`).toString('base64');
+    
+    return makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/categories/${categoryId}`, auth, {}, 'PUT', categoryData);
+}
+
+async function updateCategoryIndex(userId, productId, productCategories) {
+    try {
+        console.log(`🔄 Updating category index for product: ${productId}`);
+        
+        // Load current category index
+        const response = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/indexes/by-category.json.gz`
+        }));
+        
+        const compressedData = await response.Body.transformToByteArray();
+        const categoryIndex = JSON.parse(zlib.gunzipSync(compressedData).toString());
+        
+        // Ensure category_products exists
+        if (!categoryIndex.category_products) {
+            categoryIndex.category_products = {};
+        }
+        
+        const numericProductId = parseInt(productId);
+        
+        // Add product to appropriate categories
+        if (productCategories && productCategories.length > 0) {
+            productCategories.forEach(category => {
+                const categoryId = category.id.toString();
+                if (!categoryIndex.category_products[categoryId]) {
+                    categoryIndex.category_products[categoryId] = [];
+                }
+                // Add product if not already in category
+                if (!categoryIndex.category_products[categoryId].includes(numericProductId)) {
+                    categoryIndex.category_products[categoryId].push(numericProductId);
+                }
+            });
+        } else {
+            // Add to uncategorized
+            if (!categoryIndex.category_products['uncategorized']) {
+                categoryIndex.category_products['uncategorized'] = [];
+            }
+            if (!categoryIndex.category_products['uncategorized'].includes(numericProductId)) {
+                categoryIndex.category_products['uncategorized'].push(numericProductId);
+            }
+        }
+        
+        // Update timestamp
+        categoryIndex.lastUpdated = new Date().toISOString();
+        
+        // Save back to S3
+        const updatedJson = JSON.stringify(categoryIndex);
+        const compressedUpdated = zlib.gzipSync(updatedJson);
+        
+        await s3Client.send(new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/indexes/by-category.json.gz`,
+            Body: compressedUpdated,
+            ContentType: 'application/json',
+            ContentEncoding: 'gzip'
+        }));
+        
+        console.log(`✅ Updated category index for product: ${productId}`);
+        
+    } catch (error) {
+        console.error(`❌ Failed to update category index for product ${productId}:`, error);
+        throw error;
+    }
+}
+
 async function createAttributeInWooCommerce(baseUrl, auth, attributeData) {
     return makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/attributes', auth, {}, 'POST', attributeData);
 }
@@ -867,11 +939,28 @@ export async function handleProduct(event, userId) {
                 menu_order: productData.menu_order ? parseInt(productData.menu_order) : 0,
                 download_limit: productData.download_limit ? parseInt(productData.download_limit) : -1,
                 download_expiry: productData.download_expiry ? parseInt(productData.download_expiry) : -1,
-                // Clean images array - remove empty URLs and ensure valid format
-                images: (productData.images || [])
-                    .filter(img => img && img.src && img.src.trim() && img.src.startsWith('http'))
-                    .map(img => ({ src: img.src.trim(), alt: img.alt || '' }))
+                // Transform categories from frontend format to WooCommerce format
+                categories: productData.categories?.map(cat => ({
+                    id: parseInt(cat.key.replace('category-', ''))
+                })) || []
             };
+
+            // Process images with WooCommerce media upload support (same as updates)
+            if (productData.images && productData.images.length > 0) {
+                const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
+                const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
+                
+                console.log(`🖼️ Processing ${productData.images.length} images for new product...`);
+                processedProductData.images = await processProductImages(
+                    productData.images,
+                    baseUrl,
+                    auth,
+                    productData.name
+                );
+                console.log(`✅ Processed ${processedProductData.images.length} images for new product`);
+            } else {
+                processedProductData.images = [];
+            }
 
             const newProduct = await createProductInWooCommerce(
                 credentials.url,
@@ -926,6 +1015,16 @@ export async function handleProduct(event, userId) {
                 }));
                 
                 console.log(`✅ Successfully added new product ${newProduct.id} to S3 storage`);
+                
+                // Update category index so product appears in category views
+                console.log(`🔄 Updating category index for new product ${newProduct.id}`);
+                // Transform frontend category format to index format
+                const categoryIds = productData.categories?.map(cat => ({
+                    id: parseInt(cat.key.replace('category-', ''))
+                })) || [];
+                await updateCategoryIndex(userId, newProduct.id, categoryIds);
+                console.log(`✅ Updated category index for new product ${newProduct.id}`);
+                
             } catch (s3Error) {
                 console.error(`❌ Failed to add new product ${newProduct.id} to S3:`, s3Error);
                 console.error('S3 Error details:', s3Error.message);
@@ -943,6 +1042,86 @@ export async function handleProduct(event, userId) {
             
         } catch (error) {
             console.error('Product creation error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    success: false,
+                    error: error.message
+                })
+            };
+        }
+    }
+
+    if (event.httpMethod === 'PUT' && event.queryStringParameters?.action === 'update-category') {
+        console.log('📝 Update category request received');
+        
+        const categoryId = event.queryStringParameters?.categoryId;
+        if (!categoryId) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Category ID is required' })
+            };
+        }
+        
+        let categoryData;
+        try {
+            categoryData = JSON.parse(event.body || '{}');
+        } catch (parseError) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Invalid JSON in request body' })
+            };
+        }
+        
+        const { name, slug, parent } = categoryData;
+        
+        if (!name || !name.trim()) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Category name is required' })
+            };
+        }
+        
+        try {
+            const credentials = await getUserCredentials(userId);
+            if (!credentials) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'User credentials not found' })
+                };
+            }
+            
+            const updatedCategory = await updateCategoryInWooCommerce(
+                credentials.url,
+                credentials.username,
+                credentials.appPassword,
+                categoryId,
+                {
+                    name: name.trim(),
+                    slug: slug?.trim() || '',
+                    parent: parseInt(parent) || 0
+                }
+            );
+            
+            // Update metadata after category change
+            await updateMetadataAfterCategoryChange(userId);
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    success: true, 
+                    category: updatedCategory 
+                })
+            };
+            
+        } catch (error) {
+            console.error('Category update error:', error);
             return {
                 statusCode: 500,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
