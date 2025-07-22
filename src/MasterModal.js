@@ -344,7 +344,6 @@ const MasterModal = ({
     }
   };
 
-  console.log('MasterModal render - isOpen:', isOpen, 'action:', action, 'item:', item);
   if (!isOpen) return null;
 
   const config = getModalConfig();

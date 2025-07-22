@@ -180,8 +180,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
   };
 
   const handleMoveProduct = (product, e) => {
-    console.log('Move button clicked:', product);
-    console.log('Modal config will be:', { isOpen: true, action: 'move-product', item: product });
     e.stopPropagation();
     setProductMenuOpen(null);
     setModalConfig({ isOpen: true, action: 'move-product', item: product });
@@ -286,11 +284,6 @@ const handleArchiveProduct = async (product, e) => {
           parentCategories={userData?.metadata?.categories || []}
           onSuccess={handleModalSuccess}
         />
-        {console.log('CategoryView MasterModal props:', {
-          isOpen: modalConfig.isOpen,
-          action: modalConfig.action,
-          item: modalConfig.item
-        })}
         
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">

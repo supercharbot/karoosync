@@ -231,7 +231,7 @@ export async function deleteCategory(categoryId, authToken) {
 export async function duplicateProduct(productId, authToken) {
   console.log(`📋 Duplicating product: ${productId}`);
   
-  const result = await makeRequest(`${API_ENDPOINT}?action=duplicate&productId=${productId}`, {
+  const result = await makeRequest(`${API_ENDPOINT}?action=duplicate-product&productId=${productId}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${authToken}` }
   });

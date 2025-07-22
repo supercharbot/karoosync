@@ -759,14 +759,22 @@ async function updateCategoryIndex(userId, productId, productCategories) {
         
         const numericProductId = parseInt(productId);
         
-        // Add product to appropriate categories
+        // FIRST: Remove product from ALL existing categories
+        Object.keys(categoryIndex.category_products).forEach(categoryId => {
+            const productIndex = categoryIndex.category_products[categoryId].indexOf(numericProductId);
+            if (productIndex > -1) {
+                categoryIndex.category_products[categoryId].splice(productIndex, 1);
+            }
+        });
+        
+        // THEN: Add product to new categories
         if (productCategories && productCategories.length > 0) {
             productCategories.forEach(category => {
                 const categoryId = category.id.toString();
                 if (!categoryIndex.category_products[categoryId]) {
                     categoryIndex.category_products[categoryId] = [];
                 }
-                // Add product if not already in category
+                // Add product to new category
                 if (!categoryIndex.category_products[categoryId].includes(numericProductId)) {
                     categoryIndex.category_products[categoryId].push(numericProductId);
                 }
@@ -1427,6 +1435,12 @@ export async function handleProduct(event, userId) {
             } else {
                 console.log(`🔧 Updating regular product: ${productId}`);
                 result = await updateRegularProduct(userId, productId, productData);
+            }
+            
+            // Update S3 category indexes if categories changed
+            if (productData.categories) {
+                await updateCategoryIndex(userId, productId, productData.categories);
+                console.log(`✅ Updated S3 category index for product ${productId}`);
             }
             
             return {
