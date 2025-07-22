@@ -15,7 +15,7 @@ const CORS_HEADERS = {
 function makeWordPressRequest(baseUrl, endpoint, auth, params = {}, method = 'GET', body = null) {
     return new Promise((resolve, reject) => {
         const url = new URL(`${baseUrl}${endpoint}`);
-        if (method === 'GET') {
+        if (method === 'GET' || method === 'DELETE') {
             Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
         }
         
@@ -1301,7 +1301,7 @@ export async function handleProduct(event, userId) {
         }
     }
 
-    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'duplicate') {
+    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'duplicate-product') {
         console.log('📋 Duplicate product request received');
         
         const productId = event.queryStringParameters?.productId;
@@ -1330,6 +1330,9 @@ export async function handleProduct(event, userId) {
                 productId
             );
             
+            // Add to S3 cache
+            await addProductToS3(userId, duplicatedProduct);
+            
             return {
                 statusCode: 200,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -1352,7 +1355,7 @@ export async function handleProduct(event, userId) {
         }
     }
 
-    if (event.httpMethod === 'DELETE' && event.queryStringParameters?.action === 'delete') {
+    if (event.httpMethod === 'DELETE' && event.queryStringParameters?.action === 'delete-product') {
         console.log('🗑️ Delete product request received');
         
         const productId = event.queryStringParameters?.productId;
@@ -1380,6 +1383,9 @@ export async function handleProduct(event, userId) {
                 credentials.appPassword,
                 productId
             );
+            
+            // Remove from S3 cache
+            await removeProductFromS3(userId, productId);
             
             return {
                 statusCode: 200,
@@ -1447,4 +1453,61 @@ export async function handleProduct(event, userId) {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
         body: JSON.stringify({ success: false, error: 'Method not allowed' })
     };
+}
+
+async function removeProductFromS3(userId, productId) {
+    try {
+        // Update products.json.gz to remove the product
+        const response = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/products.json.gz`
+        }));
+        
+        const compressed = await response.Body.transformToByteArray();
+        const productsData = JSON.parse(zlib.gunzipSync(compressed).toString());
+        
+        delete productsData.products[productId];
+        
+        await s3Client.send(new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/products.json.gz`,
+            Body: zlib.gzipSync(JSON.stringify(productsData)),
+            ContentType: 'application/json',
+            ContentEncoding: 'gzip'
+        }));
+        
+        console.log(`✅ Removed product ${productId} from S3 cache`);
+    } catch (error) {
+        console.error(`❌ Failed to remove product ${productId} from S3:`, error)
+    }
+}
+
+async function addProductToS3(userId, product) {
+    try {
+        // Update products.json.gz
+        const response = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/products.json.gz`
+        }));
+        
+        const compressed = await response.Body.transformToByteArray();
+        const productsData = JSON.parse(zlib.gunzipSync(compressed).toString());
+        
+        productsData.products[product.id] = product;
+        
+        await s3Client.send(new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/products.json.gz`,
+            Body: zlib.gzipSync(JSON.stringify(productsData)),
+            ContentType: 'application/json',
+            ContentEncoding: 'gzip'
+        }));
+
+        // Update category index
+        await updateCategoryIndex(userId, product.id, product.categories);
+        
+        console.log(`✅ Added product ${product.id} to S3 cache and category index`);
+    } catch (error) {
+        console.error(`❌ Failed to add product to S3:`, error);
+    }
 }

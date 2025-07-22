@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Plus, Edit, Trash2, AlertTriangle, FolderPlus } from 'lucide-react';
+import { X, Loader2, Plus, Edit, Trash2, AlertTriangle, FolderPlus, Settings } from 'lucide-react';
 import { useAuth } from './AuthContext';
-import { createCategory, updateCategory, deleteCategory } from './api';
+import { createCategory, updateCategory, deleteCategory, updateProduct } from './api';
 
 const MasterModal = ({ 
   isOpen, 
   onClose, 
-  action, // 'create-category', 'edit-category', 'delete-category'
+  action, // 'create-category', 'edit-category', 'delete-category', 'move-product'
   item, // category or product data
   parentCategories = [],
   onSuccess 
@@ -42,6 +42,11 @@ const MasterModal = ({
         break;
       case 'delete-category':
         setFormData({}); // No form data needed for delete
+        break;
+      case 'move-product':
+        setFormData({
+          category: item?.categories?.[0]?.id?.toString() || ''
+        });
         break;
       default:
         setFormData({});
@@ -100,6 +105,12 @@ const MasterModal = ({
           result = await deleteCategory(item.id, authToken);
           break;
 
+        case 'move-product':
+          result = await updateProduct(item.id, {
+            categories: [{ id: parseInt(formData.category) }]
+          }, authToken);
+          break;
+
         default:
           throw new Error('Unknown action');
       }
@@ -121,6 +132,12 @@ const MasterModal = ({
     if (action === 'create-category' || action === 'edit-category') {
       if (!formData.name?.trim()) {
         setError('Category name is required');
+        return false;
+      }
+    }
+    if (action === 'move-product') {
+      if (!formData.category) {
+        setError('Please select a category');
         return false;
       }
     }
@@ -152,6 +169,14 @@ const MasterModal = ({
           iconBg: 'bg-red-100 dark:bg-red-900/20',
           submitText: 'Delete Category',
           submitBg: 'bg-red-600 hover:bg-red-700'
+        };
+      case 'move-product':
+        return {
+          title: 'Move Product',
+          icon: <Settings className="w-5 h-5 text-blue-600 dark:text-blue-400" />,
+          iconBg: 'bg-blue-100 dark:bg-blue-900/20',
+          submitText: 'Move Product',
+          submitBg: 'bg-blue-600 hover:bg-blue-700'
         };
       default:
         return {
@@ -289,11 +314,37 @@ const MasterModal = ({
           </div>
         );
 
+      case 'move-product':
+        return (
+          <div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Move "{item?.name}" to a different category
+            </p>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Move to Category
+            </label>
+            <select
+              value={formData.category}
+              onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              required
+            >
+              <option value="">Select category...</option>
+              {parentCategories.map(category => (
+                <option key={category.id} value={category.id}>
+                  {category.parent_id === 0 ? category.name : `-- ${category.name}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+
       default:
         return null;
     }
   };
 
+  console.log('MasterModal render - isOpen:', isOpen, 'action:', action, 'item:', item);
   if (!isOpen) return null;
 
   const config = getModalConfig();
@@ -345,13 +396,13 @@ const MasterModal = ({
             </button>
             <button
               type="submit"
-              disabled={loading || (action !== 'delete-category' && !formData.name?.trim())}
+              disabled={loading}
               className={`flex-1 px-4 py-2 ${config.submitBg} text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors`}
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {action.includes('create') ? 'Creating...' : action.includes('edit') ? 'Updating...' : 'Deleting...'}
+                  {action.includes('create') ? 'Creating...' : action.includes('edit') ? 'Updating...' : action.includes('delete') ? 'Deleting...' : 'Moving...'}
                 </>
               ) : (
                 <>

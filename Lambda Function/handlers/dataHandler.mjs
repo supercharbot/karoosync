@@ -332,7 +332,7 @@ async function loadCategories(userId) {
                 ...category,
                 productCount: categoryIndex.category_products?.[category.id]?.length || 0
             }))
-            .filter(category => category.productCount > 0); // Only include categories with products
+            // Show all categories including empty ones
         
         // Add uncategorized if it has products
         const uncategorizedCount = categoryIndex.category_products?.['uncategorized']?.length || 0;

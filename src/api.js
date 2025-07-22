@@ -228,6 +228,17 @@ export async function deleteCategory(categoryId, authToken) {
   return result;
 }
 
+export async function duplicateProduct(productId, authToken) {
+  console.log(`📋 Duplicating product: ${productId}`);
+  
+  const result = await makeRequest(`${API_ENDPOINT}?action=duplicate&productId=${productId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+
+  return result;
+}
+
 // ============================================
 // ACCOUNT MANAGEMENT FUNCTIONS
 // ============================================
@@ -418,18 +429,6 @@ export async function getHealthStatus() {
   } catch (error) {
     return { success: false, error: error.message };
   }
-}
-
-export async function duplicateProduct(productId, authToken) {
-  console.log(`📋 Duplicating product: ${productId}`);
-  
-  const result = await makeRequest(`${API_ENDPOINT}?action=duplicate-product`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${authToken}` },
-    body: JSON.stringify({ productId })
-  });
-
-  return result;
 }
 
 export async function deleteProduct(productId, authToken) {

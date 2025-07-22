@@ -138,6 +138,33 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     onProductSelect(product);
   };
 
+  const handleProductMenuClick = (productId, e) => {
+    e.stopPropagation();
+    setProductMenuOpen(productMenuOpen === productId ? null : productId);
+  };
+
+  const handleDuplicateProduct = async (product, e) => {
+    e.stopPropagation();
+    setProductMenuOpen(null);
+    setOperationLoading(`duplicate-${product.id}`);
+    
+    try {
+      const authToken = await getAuthToken();
+      const result = await duplicateProduct(product.id, authToken);
+      
+      if (result.success) {
+        loadProducts();
+        if (onDataUpdate) onDataUpdate();
+      } else {
+        setError(result.error || 'Failed to duplicate product');
+      }
+    } catch (error) {
+      setError(error.message);
+    }
+    
+    setOperationLoading(null);
+  };
+
   const handleCreateCategory = () => {
     setModalConfig({ isOpen: true, action: 'create-category', item: null });
   };
@@ -150,6 +177,14 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     if (onDataUpdate) {
       onDataUpdate();
     }
+  };
+
+  const handleMoveProduct = (product, e) => {
+    console.log('Move button clicked:', product);
+    console.log('Modal config will be:', { isOpen: true, action: 'move-product', item: product });
+    e.stopPropagation();
+    setProductMenuOpen(null);
+    setModalConfig({ isOpen: true, action: 'move-product', item: product });
   };
 
   const handleCategoryMenuClick = (categoryId, e) => {
@@ -167,34 +202,6 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     e.stopPropagation();
     setCategoryMenuOpen(null);
     setModalConfig({ isOpen: true, action: 'delete-category', item: category });
-  };
-
-  // Product Menu Handlers
-  const handleProductMenuClick = (productId, e) => {
-    e.stopPropagation();
-    setProductMenuOpen(productMenuOpen === productId ? null : productId);
-  };
-
-  const handleDuplicateProduct = async (product, e) => {
-    e.stopPropagation();
-    setProductMenuOpen(null);
-    setOperationLoading(`duplicate-${product.id}`);
-    
-    try {
-      const authToken = await getAuthToken();
-      const result = await duplicateProduct(product.id, authToken);
-      
-      if (result.success) {
-        loadProducts(); // Reload to show the duplicated product
-      } else {
-        setError(result.error || 'Failed to duplicate product');
-      }
-    } catch (error) {
-      console.error('Duplicate product error:', error);
-      setError(error.message);
-    }
-    
-    setOperationLoading(null);
   };
 
   const handleDeleteProduct = async (product, e) => {
@@ -279,6 +286,11 @@ const handleArchiveProduct = async (product, e) => {
           parentCategories={userData?.metadata?.categories || []}
           onSuccess={handleModalSuccess}
         />
+        {console.log('CategoryView MasterModal props:', {
+          isOpen: modalConfig.isOpen,
+          action: modalConfig.action,
+          item: modalConfig.item
+        })}
         
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -465,6 +477,14 @@ const handleArchiveProduct = async (product, e) => {
   // Selected category view (products)
   return (
     <div className="p-4 lg:p-6 bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-64px)] lg:min-h-[calc(100vh-73px)]">
+      <MasterModal
+        isOpen={modalConfig.isOpen}
+        onClose={handleModalClose}
+        action={modalConfig.action}
+        item={modalConfig.item}
+        parentCategories={userData?.metadata?.categories || []}
+        onSuccess={handleModalSuccess}
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center">
@@ -598,6 +618,7 @@ const handleArchiveProduct = async (product, e) => {
             onDuplicateProduct={handleDuplicateProduct}
             onDeleteProduct={handleDeleteProduct}
             onArchiveProduct={handleArchiveProduct}
+            onMoveProduct={handleMoveProduct}
             operationLoading={operationLoading}
             viewMode={viewMode}
           />
@@ -657,6 +678,7 @@ const ProductCard = ({
   onDuplicateProduct,
   onDeleteProduct,
   onArchiveProduct,
+  onMoveProduct,
   operationLoading,
   viewMode 
 }) => {
@@ -706,7 +728,7 @@ const ProductCard = ({
   return (
     <div
       onClick={() => onProductSelect(product)}
-      className="group bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden cursor-pointer hover:shadow-md transition-all hover:translate-y-[-2px]"
+      className="group relative bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden cursor-pointer hover:shadow-md transition-all hover:translate-y-[-2px]"
     >
       <div className="relative aspect-square bg-gray-100 dark:bg-gray-700">
         {product.images?.[0] ? (
@@ -725,9 +747,47 @@ const ProductCard = ({
         </div>
       </div>
       <div className="p-3">
-        <h3 className="font-medium text-gray-900 dark:text-gray-100 text-sm leading-tight line-clamp-2 mb-1">
-          {product.name}
-        </h3>
+        <div className="flex items-start justify-between mb-1">
+          <h3 className="flex-1 font-medium text-gray-900 dark:text-gray-100 text-sm leading-tight line-clamp-2 pr-2">
+            {product.name}
+          </h3>
+          <div className="absolute top-2 right-2 z-20">
+          <button
+            onClick={(e) => onProductMenuClick(product.id, e)}
+            className="p-1.5 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-white dark:hover:bg-gray-800 shadow-sm"
+          >
+            <MoreHorizontal className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+          </button>
+
+          {productMenuOpen === product.id && (
+            <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                <button
+                  onClick={(e) => onMoveProduct(product, e)}
+                  className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Move To
+                </button>
+                <button
+                  onClick={(e) => onDuplicateProduct(product, e)}
+                  className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center"
+                  disabled={operationLoading === `duplicate-${product.id}`}
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  {operationLoading === `duplicate-${product.id}` ? 'Duplicating...' : 'Duplicate'}
+                </button>
+                <button
+                  onClick={(e) => onDeleteProduct(product, e)}
+                  className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center"
+                  disabled={operationLoading === `delete-${product.id}`}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {operationLoading === `delete-${product.id}` ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
         {product._categoryName && (
           <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">
             {product._categoryName}
