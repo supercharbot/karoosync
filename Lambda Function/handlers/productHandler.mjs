@@ -1097,12 +1097,29 @@ export async function handleProduct(event, userId) {
             
         } catch (error) {
             console.error('Product creation error:', error);
+            
+            // Extract specific error message for duplicate SKU
+            let errorMessage = error.message;
+            if (error.message.includes('product_invalid_sku') || error.message.includes('duplicated SKU')) {
+                // Extract SKU from the error data if available
+                let sku = 'provided SKU';
+                try {
+                    const errorData = JSON.parse(error.message.split(': ')[1]);
+                    if (errorData.data && errorData.data.unique_sku) {
+                        sku = errorData.data.unique_sku;
+                    }
+                } catch (parseError) {
+                    // Fallback to generic message if we can't parse
+                }
+                errorMessage = `SKU "${sku}" already exists. Please use a different SKU.`;
+            }
+            
             return {
-                statusCode: 500,
+                statusCode: 400,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     success: false,
-                    error: error.message
+                    error: errorMessage
                 })
             };
         }

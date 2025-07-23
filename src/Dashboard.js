@@ -4,7 +4,7 @@ import { Package, ShoppingCart, TrendingUp, Clock } from 'lucide-react';
 const Dashboard = ({ userData }) => {
   const totalProducts = userData?.metadata?.totalProducts || 0;
   const totalCategories = userData?.metadata?.categories?.length || 0;
-  const lastSync = userData?.metadata?.cachedAt ? new Date(userData.metadata.cachedAt).toLocaleDateString() : 'Never';
+  const lastSync = userData?.metadata?.lastSync ? new Date(userData.metadata.lastSync).toLocaleDateString() : 'Never';
 
   const stats = [
     {

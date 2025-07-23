@@ -319,7 +319,11 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
       }
     } catch (error) {
       console.error('Error creating product:', error);
-      setErrors({ submit: error.message });
+      if (error.message.includes('SKU') && error.message.includes('already exists')) {
+        setErrors({ sku: error.message });
+      } else {
+        setErrors({ submit: error.message });
+      }
     }
     setSaving(false);
   };
@@ -961,6 +965,23 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
         <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
           {renderStepContent()}
         </div>
+
+        {/* Global Error Display */}
+        {Object.keys(errors).length > 0 && (
+          <div className="flex-shrink-0 p-4 sm:p-6 border-t border-gray-200 bg-red-50">
+            <div className="bg-red-100 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center mb-2">
+                <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                <h4 className="text-sm font-medium text-red-800">Please fix the following errors:</h4>
+              </div>
+              <ul className="text-sm text-red-700 list-disc list-inside space-y-1">
+                {Object.values(errors).map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         {/* Mobile-First Footer */}
         <div className="flex-shrink-0 p-4 sm:p-6 border-t border-gray-200 bg-gray-50">
