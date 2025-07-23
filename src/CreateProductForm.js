@@ -202,7 +202,23 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
   }, [productType]);
 
   const handleInputChange = (field, value) => {
-    setProductData(prev => ({ ...prev, [field]: value }));
+    setProductData(prev => {
+      // Handle nested field updates (e.g., 'dimensions.length')
+      if (field.includes('.')) {
+        const [parentField, childField] = field.split('.');
+        return {
+          ...prev,
+          [parentField]: {
+            ...prev[parentField],
+            [childField]: value
+          }
+        };
+      }
+      
+      // Handle regular field updates
+      return { ...prev, [field]: value };
+    });
+    
     // Track if slug was manually edited
     if (field === 'slug') {
       setSlugManuallyEdited(true);
@@ -490,7 +506,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
               activeImageIndex={activeImageIndex}
               setActiveImageIndex={setActiveImageIndex}
               hidepricing={productType === 'variable'}
-              isMobile={false}
+              isMobile={window.innerWidth < 640}
             />
             
             {/* Error Display */}
@@ -910,7 +926,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">Create New Product</h2>
-            <p className="text-xs sm:text-sm text-gray-600 mt-1">
+            <p className="hidden sm:block text-xs sm:text-sm text-gray-600 mt-1">
               Step {currentStep} of {steps.length} • {steps[currentStep - 1]?.description}
             </p>
           </div>
@@ -923,7 +939,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
         </div>
 
         {/* Progress Bar */}
-        <div className="px-3 sm:px-6 py-3 sm:py-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
+        <div className="hidden sm:block px-3 sm:px-6 py-3 sm:py-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center justify-between">
             {steps.map((step, index) => (
               <div key={step.id} className={`flex items-center ${index < steps.length - 1 ? 'flex-1' : ''}`}>
@@ -968,7 +984,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
 
         {/* Global Error Display */}
         {Object.keys(errors).length > 0 && (
-          <div className="flex-shrink-0 p-4 sm:p-6 border-t border-gray-200 bg-red-50">
+          <div className="hidden sm:block flex-shrink-0 p-4 sm:p-6 border-t border-gray-200 bg-red-50">
             <div className="bg-red-100 border border-red-200 rounded-lg p-4">
               <div className="flex items-center mb-2">
                 <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
@@ -990,7 +1006,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
             <button
               onClick={prevStep}
               disabled={currentStep === 1}
-              className={`order-2 sm:order-1 flex items-center justify-center px-6 py-4 sm:py-3 border rounded-lg transition-colors font-medium ${
+              className={`order-2 sm:order-1 flex items-center justify-center px-4 py-2 sm:px-6 sm:py-3 border rounded-lg transition-colors text-sm sm:font-medium ${
                 currentStep === 1
                   ? 'border-gray-200 text-gray-400 cursor-not-allowed'
                   : 'border-gray-300 text-gray-700 hover:bg-white hover:shadow-sm'
@@ -1005,7 +1021,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
               {currentStep < steps.length ? (
                 <button
                   onClick={nextStep}
-                  className="flex items-center justify-center px-8 py-4 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium text-lg sm:text-base"
+                  className="flex items-center justify-center px-4 py-2 sm:px-8 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm sm:font-medium sm:text-base"
                 >
                   Continue
                   <ArrowRight className="w-5 h-5 ml-2" />
@@ -1014,7 +1030,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
                 <button
                   onClick={handleSubmit}
                   disabled={saving}
-                  className="flex items-center justify-center px-8 py-4 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 shadow-sm font-medium text-lg sm:text-base"
+                  className="flex items-center justify-center px-4 py-2 sm:px-8 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 shadow-sm text-sm sm:font-medium sm:text-base"
                 >
                   {saving ? (
                     <>

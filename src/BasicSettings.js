@@ -43,7 +43,7 @@ const BasicSettings = ({
   };
 
   return (
-    <div className={`${isMobile ? 'p-4 pb-20 w-full max-w-full min-w-0' : 'p-6'} ${isMobile ? 'space-y-4' : 'space-y-6'}`}>
+    <div className={`${isMobile ? 'p-2 pb-20 w-full max-w-full min-w-0' : 'p-6'} ${isMobile ? 'space-y-4' : 'space-y-6'}`}>
       
       {/* Sale Settings */}
       {!hidepricing && (
@@ -55,7 +55,7 @@ const BasicSettings = ({
       )}
 
       {/* Basic Product Information */}
-      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6 space-y-4 ${isMobile ? '-mx-4 mx-1' : ''}`}>
+      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6 space-y-4 ${isMobile ? '-mx-4' : ''}`}>
         <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Basic Information</h3>
         
         {/* Product Name */}
