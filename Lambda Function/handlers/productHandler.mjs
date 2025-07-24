@@ -976,17 +976,28 @@ export async function handleProduct(event, userId) {
             }
             
             // Process attributes if they exist (for variable products)
-            if (productData.attributes && productData.attributes.length > 0) {
-                productData.attributes = await processNewAttributes(
-                    credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`,
-                    Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64'),
-                    productData.attributes
-                );
+            let processedAttributes = [];
+            if (productData.attributes && Array.isArray(productData.attributes) && productData.attributes.length > 0) {
+                try {
+                    const result = await processNewAttributes(
+                        credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`,
+                        Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64'),
+                        productData.attributes
+                    );
+                    processedAttributes = Array.isArray(result) ? result : [];
+                    console.log(`✅ Processed ${processedAttributes.length} attributes for variable product`);
+                } catch (error) {
+                    console.error('❌ Failed to process attributes:', error);
+                    processedAttributes = [];
+                }
             }
+            
+            console.log(`🔍 DEBUGGING: Final processed attributes:`, JSON.stringify(processedAttributes, null, 2));
             
             // Convert string values to proper types for WooCommerce API
             const processedProductData = {
                 ...productData,
+                attributes: processedAttributes, // Explicitly set as array
                 stock_quantity: productData.stock_quantity ? parseInt(productData.stock_quantity) : null,
                 regular_price: productData.regular_price ? parseFloat(productData.regular_price).toString() : '',
                 sale_price: productData.sale_price ? parseFloat(productData.sale_price).toString() : '',
@@ -999,6 +1010,8 @@ export async function handleProduct(event, userId) {
                     id: parseInt(cat.key.replace('category-', ''))
                 })) || []
             };
+            
+            console.log(`🔍 DEBUGGING: Final processedProductData attributes:`, JSON.stringify(processedProductData.attributes, null, 2));
 
             // Process images with WooCommerce media upload support (same as updates)
             if (productData.images && productData.images.length > 0) {

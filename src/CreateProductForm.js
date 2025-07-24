@@ -67,7 +67,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
   const [availableAttributes, setAvailableAttributes] = useState([]);
   const [loadingAttributes, setLoadingAttributes] = useState(false);
   const [showAttributeSelector, setShowAttributeSelector] = useState(false);
-  const [newAttributeValues, setNewAttributeValues] = useState(['Size 10', 'Size 12', 'Size 14']);
+  const [newAttributeValues, setNewAttributeValues] = useState(['', '', '']);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -157,7 +157,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
       handleInputChange('attributes', newAttributes);
       
       nameInput.value = '';
-      setNewAttributeValues(['']);
+      setNewAttributeValues(['', '', '']);
     }
   };
 
@@ -671,12 +671,6 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
                     </button>
                   </div>
                   
-                  <button
-                    onClick={addNewAttribute}
-                    className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                  >
-                    Add Variation Type
-                  </button>
                 </div>
               </div>
 
