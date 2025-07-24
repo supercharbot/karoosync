@@ -1,6 +1,7 @@
 import https from 'https';
 import zlib from 'zlib';
 import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 
 const s3Client = new S3Client({ region: 'ap-southeast-2' });
 const BUCKET_NAME = 'karoosync';
@@ -941,7 +942,201 @@ async function createVariationsInWooCommerce(url, username, appPassword, product
     }
 }
 
+// Add job utilities at top of file
+function generateJobId() {
+    return `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+async function saveJobStatus(userId, jobId, status, progress = 0, result = null, error = null) {
+    try {
+        console.log(`💾 Saving job status: ${jobId} - ${status} (${progress}%)`);
+        const jobData = { jobId, userId, status, progress, result, error, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        const compressedData = zlib.gzipSync(JSON.stringify(jobData));
+        await s3Client.send(new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/jobs/${jobId}.json.gz`,
+            Body: compressedData,
+            ContentType: 'application/json',
+            ContentEncoding: 'gzip'
+        }));
+        console.log(`✅ Job status saved successfully: ${jobId}`);
+    } catch (error) {
+        console.error(`❌ Failed to save job status:`, error);
+        throw error;
+    }
+}
+
+async function getJobStatus(userId, jobId) {
+    try {
+        const response = await s3Client.send(new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `users/${userId}/jobs/${jobId}.json.gz`
+        }));
+        const compressed = await response.Body.transformToByteArray();
+        return JSON.parse(zlib.gunzipSync(compressed).toString());
+    } catch (error) {
+        if (error.name === 'NoSuchKey') return null;
+        throw error;
+    }
+}
+
+export async function createProductBackground(userId, productData, jobId) {
+    try {
+        console.log(`🚀 Starting background product creation for job: ${jobId}`);
+        await saveJobStatus(userId, jobId, 'processing', 10);
+        
+        const credentials = await getUserCredentials(userId);
+        if (!credentials) {
+            await saveJobStatus(userId, jobId, 'failed', 0, null, 'User credentials not found');
+            return;
+        }
+        
+        await saveJobStatus(userId, jobId, 'processing', 20);
+        
+        // Process attributes
+        let processedAttributes = [];
+        if (productData.attributes && Array.isArray(productData.attributes) && productData.attributes.length > 0) {
+            try {
+                const result = await processNewAttributes(
+                    credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`,
+                    Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64'),
+                    productData.attributes
+                );
+                processedAttributes = Array.isArray(result) ? result : [];
+            } catch (error) {
+                console.error('❌ Failed to process attributes:', error);
+                processedAttributes = [];
+            }
+        }
+        
+        await saveJobStatus(userId, jobId, 'processing', 40);
+        
+        const processedProductData = {
+            ...productData,
+            attributes: processedAttributes,
+            stock_quantity: productData.stock_quantity ? parseInt(productData.stock_quantity) : null,
+            regular_price: productData.regular_price ? parseFloat(productData.regular_price).toString() : '',
+            sale_price: productData.sale_price ? parseFloat(productData.sale_price).toString() : '',
+            weight: productData.weight ? parseFloat(productData.weight).toString() : '',
+            menu_order: productData.menu_order ? parseInt(productData.menu_order) : 0,
+            download_limit: productData.download_limit ? parseInt(productData.download_limit) : -1,
+            download_expiry: productData.download_expiry ? parseInt(productData.download_expiry) : -1,
+            categories: productData.categories?.map(cat => ({
+                id: parseInt(cat.key.replace('category-', ''))
+            })) || []
+        };
+
+        // Process images
+        if (productData.images && productData.images.length > 0) {
+            const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
+            const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
+            
+            await saveJobStatus(userId, jobId, 'processing', 60);
+            processedProductData.images = await processProductImages(productData.images, baseUrl, auth, productData.name);
+        } else {
+            processedProductData.images = [];
+        }
+
+        await saveJobStatus(userId, jobId, 'processing', 80);
+        
+        const newProduct = await createProductInWooCommerce(
+            credentials.url,
+            credentials.username,
+            credentials.appPassword,
+            processedProductData
+        );
+        
+        // Handle variations for variable products
+        if (productData.type === 'variable' && productData.variations) {
+            await createVariationsInWooCommerce(
+                credentials.url,
+                credentials.username,
+                credentials.appPassword,
+                newProduct.id,
+                productData.variations
+            );
+        }
+        
+        await saveJobStatus(userId, jobId, 'processing', 95);
+        
+        // Update S3 storage
+        try {
+            const existingData = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/products.json.gz`
+            }));
+            const compressed = await existingData.Body.transformToByteArray();
+            const data = JSON.parse(zlib.gunzipSync(compressed).toString());
+            
+            data.products[newProduct.id] = newProduct;
+            data.lastUpdated = new Date().toISOString();
+            
+            const updatedJson = JSON.stringify(data);
+            const compressedUpdated = zlib.gzipSync(updatedJson);
+            
+            await s3Client.send(new PutObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/products.json.gz`,
+                Body: compressedUpdated,
+                ContentType: 'application/json',
+                ContentEncoding: 'gzip'
+            }));
+            
+            await updateCategoryIndex(userId, newProduct.id, newProduct.categories);
+        } catch (s3Error) {
+            console.error('❌ Failed to update S3 storage:', s3Error);
+        }
+        
+        await saveJobStatus(userId, jobId, 'completed', 100, { 
+            product: newProduct,
+            success: true,
+            productId: newProduct.id 
+        });
+        
+        console.log(`✅ Background job ${jobId} completed successfully`);
+        
+    } catch (error) {
+        console.error(`❌ Background job ${jobId} failed:`, error);
+        await saveJobStatus(userId, jobId, 'failed', 0, null, error.message);
+    }
+}
+
 export async function handleProduct(event, userId) {
+    // Handle job status check
+    if (event.httpMethod === 'GET' && event.queryStringParameters?.action === 'job-status') {
+        const jobId = event.queryStringParameters?.jobId;
+        if (!jobId) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Job ID required' })
+            };
+        }
+        
+        try {
+            const jobStatus = await getJobStatus(userId, jobId);
+            if (!jobStatus) {
+                return {
+                    statusCode: 404,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'Job not found' })
+                };
+            }
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: true, job: jobStatus })
+            };
+        } catch (error) {
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: error.message })
+            };
+        }
+    }
+
     if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'create-product') {
         console.log('➕ Create product request received');
         
@@ -966,14 +1161,34 @@ export async function handleProduct(event, userId) {
         }
         
         try {
-            const credentials = await getUserCredentials(userId);
-            if (!credentials) {
-                return {
-                    statusCode: 400,
-                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ success: false, error: 'User credentials not found' })
-                };
-            }
+            // Generate job ID and return immediately
+            const jobId = generateJobId();
+            
+            // Start background processing via separate Lambda invocation
+            const lambda = new (await import('@aws-sdk/client-lambda')).LambdaClient({ region: 'ap-southeast-2' });
+            await lambda.send(new (await import('@aws-sdk/client-lambda')).InvokeCommand({
+                FunctionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
+                InvocationType: 'Event', // Async
+                Payload: JSON.stringify({
+                    source: 'background-job',
+                    jobType: 'create-product',
+                    userId,
+                    productData,
+                    jobId
+                })
+            }));
+            
+            // Return immediately with job ID
+            return {
+                statusCode: 202,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    success: true, 
+                    jobId,
+                    message: 'Product creation started',
+                    status: 'processing'
+                })
+            };
             
             // Process attributes if they exist (for variable products)
             let processedAttributes = [];
@@ -1492,6 +1707,86 @@ export async function handleProduct(event, userId) {
         }
     }
     
+    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'upload-product-image') {
+        const { productId } = event.queryStringParameters;
+        const { image, index } = JSON.parse(event.body || '{}');
+        
+        try {
+            const credentials = await getUserCredentials(userId);
+            const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
+            const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
+            
+            const processedImages = await processProductImages([image], baseUrl, auth, `Product ${productId}`);
+            
+            // Update product with new image
+            const existingProduct = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/${productId}`, auth);
+            const updatedImages = [...(existingProduct.images || []), ...processedImages];
+            
+            await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/${productId}`, auth, {}, 'PUT', { 
+                images: updatedImages 
+            });
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: true, image: processedImages[0] })
+            };
+        } catch (error) {
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: error.message })
+            };
+        }
+    }
+
+    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'refresh-product') {
+        const { productId } = event.queryStringParameters;
+        
+        try {
+            const credentials = await getUserCredentials(userId);
+            const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
+            const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
+            
+            // Get updated product from WooCommerce
+            const updatedProduct = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/${productId}`, auth);
+            
+            // Update S3 storage
+            const existingData = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/products.json.gz`
+            }));
+            const compressed = await existingData.Body.transformToByteArray();
+            const data = JSON.parse(zlib.gunzipSync(compressed).toString());
+            
+            data.products[productId] = updatedProduct;
+            data.lastUpdated = new Date().toISOString();
+            
+            const updatedJson = JSON.stringify(data);
+            const compressedUpdated = zlib.gzipSync(updatedJson);
+            
+            await s3Client.send(new PutObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/products.json.gz`,
+                Body: compressedUpdated,
+                ContentType: 'application/json',
+                ContentEncoding: 'gzip'
+            }));
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: true })
+            };
+        } catch (error) {
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: error.message })
+            };
+        }
+    }
+
     return {
         statusCode: 405,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },

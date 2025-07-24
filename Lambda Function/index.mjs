@@ -68,6 +68,15 @@ export const handler = async (event) => {
             // For async invocations, userId is in the payload
             return await handleSync(event, null);
         }
+        
+        // Handle background job invocations
+        if (event.source === 'background-job') {
+            if (event.jobType === 'create-product') {
+                const { createProductBackground } = await import('./handlers/productHandler.mjs');
+                await createProductBackground(event.userId, event.productData, event.jobId);
+                return { statusCode: 200, body: 'Background job completed' };
+            }
+        }
 
         // *** ALL OTHER REQUESTS - Require Authentication ***
         console.log('🔒 Non-webhook request - extracting user ID from JWT');
@@ -106,6 +115,9 @@ export const handler = async (event) => {
         // Product operations: PUT requests and category management
         if (event.httpMethod === 'PUT' ||
             (event.httpMethod === 'POST' && action === 'create-product') ||
+            (event.httpMethod === 'GET' && action === 'job-status') ||
+            (event.httpMethod === 'POST' && action === 'upload-product-image') ||
+            (event.httpMethod === 'POST' && action === 'refresh-product') ||
             (event.httpMethod === 'POST' && action === 'create-category') ||
             (event.httpMethod === 'POST' && action === 'duplicate-product') ||
             (event.httpMethod === 'PUT' && action === 'update-category') ||

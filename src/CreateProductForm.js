@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import BasicSettings from './BasicSettings';
 import AdvancedSettings from './AdvancedSettings';
-import { createProduct, loadWooCommerceAttributes } from './api';
+import { createProduct, loadWooCommerceAttributes, pollJobUntilComplete, uploadProductImages } from './api';
 import { useAuth } from './AuthContext';
 
 const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory }) => {
@@ -70,6 +70,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
   const [newAttributeValues, setNewAttributeValues] = useState(['', '', '']);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState('');
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   // Fetch existing attributes from WooCommerce (same as AdvancedSettings.js)
@@ -324,11 +325,42 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
     
     setSaving(true);
     try {
+      setSubmitStatus('Creating product...');
+      
       const authToken = await getAuthToken();
-      const result = await createProduct(productData, authToken);
+      
+      // Extract images and create product without them
+      const images = productData.images || [];
+      const productDataWithoutImages = { ...productData, images: [] };
+      
+      // Start async product creation
+      const jobResult = await createProduct(productDataWithoutImages, authToken);
+      
+      if (!jobResult.success) {
+        throw new Error(jobResult.error || 'Failed to start product creation');
+      }
+      
+      const jobId = jobResult.jobId;
+      console.log('🔄 Product creation started, job ID:', jobId);
+      
+      // Poll for completion with progress updates
+      const result = await pollJobUntilComplete(jobId, authToken, (job) => {
+        setSubmitStatus(`Creating product... ${job.progress}%`);
+        console.log(`Job progress: ${job.status} - ${job.progress}%`);
+      });
       
       if (result.success) {
-        onProductCreated(result.product);
+        const createdProduct = result.result.product;
+        
+        // Upload images if any exist
+        if (images.length > 0) {
+          setSubmitStatus(`Uploading ${images.length} images...`);
+          await uploadProductImages(createdProduct.id, images, authToken, (progress) => {
+            setSubmitStatus(`Uploading images... ${progress}%`);
+          });
+        }
+        
+        onProductCreated(createdProduct);
         onClose();
       } else {
         setErrors({ submit: result.error });
@@ -1029,7 +1061,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
                   {saving ? (
                     <>
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      Creating...
+                      {submitStatus || 'Creating...'}
                     </>
                   ) : (
                     <>

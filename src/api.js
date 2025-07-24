@@ -487,3 +487,70 @@ export async function createProduct(productData, authToken) {
 
   return result;
 }
+
+export async function getJobStatus(jobId, authToken) {
+  const result = await makeRequest(`${API_ENDPOINT}?action=job-status&jobId=${jobId}`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+  return result;
+}
+
+export async function pollJobUntilComplete(jobId, authToken, onProgress = null) {
+  const maxWait = 300000; // 5 minutes max
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < maxWait) {
+    try {
+      const statusResult = await getJobStatus(jobId, authToken);
+      
+      if (!statusResult.success) {
+        throw new Error(statusResult.error || 'Failed to get job status');
+      }
+      
+      const job = statusResult.job;
+      
+      if (onProgress) {
+        onProgress(job);
+      }
+      
+      if (job.status === 'completed') {
+        return { success: true, result: job.result };
+      }
+      
+      if (job.status === 'failed') {
+        throw new Error(job.error || 'Job failed');
+      }
+      
+      // Wait 2 seconds before next poll
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+    } catch (error) {
+      console.error('Polling error:', error);
+      throw error;
+    }
+  }
+  
+  throw new Error('Job timeout - product creation took too long');
+}
+
+export async function uploadProductImages(productId, images, authToken, onProgress = null) {
+  for (let i = 0; i < images.length; i++) {
+    const image = images[i];
+    
+    if (onProgress) {
+      onProgress(Math.round(((i + 1) / images.length) * 100));
+    }
+    
+    await makeRequest(`${API_ENDPOINT}?action=upload-product-image&productId=${productId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ image, index: i })
+    });
+  }
+  
+  // Update S3 with final product including images
+  await makeRequest(`${API_ENDPOINT}?action=refresh-product&productId=${productId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+}
