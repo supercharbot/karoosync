@@ -817,22 +817,42 @@ async function loadWooCommerceAttributes(userId) {
         // Fetch all attributes from WooCommerce
         const attributes = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/attributes', auth, { per_page: 100 });
         
-        // Fetch terms for each attribute
-        for (const attribute of attributes) {
+        // Create parallel promises for fetching terms
+        const termPromises = attributes.map(async (attribute) => {
             try {
-                const terms = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/attributes/${attribute.id}/terms`, auth, { per_page: 100 });
-                attribute.terms = terms || [];
+                const terms = await makeWordPressRequest(
+                    baseUrl, 
+                    `/wp-json/wc/v3/products/attributes/${attribute.id}/terms`, 
+                    auth, 
+                    { per_page: 50 } // Reduced from 100 to 50 for faster response
+                );
+                return { ...attribute, terms: terms || [] };
             } catch (termError) {
                 console.error(`Failed to load terms for attribute ${attribute.name}:`, termError);
-                attribute.terms = [];
+                return { ...attribute, terms: [] };
+            }
+        });
+        
+        // Execute all term requests in parallel with a concurrency limit
+        const BATCH_SIZE = 5; // Process 5 attributes at a time to avoid overwhelming WooCommerce
+        const enrichedAttributes = [];
+        
+        for (let i = 0; i < termPromises.length; i += BATCH_SIZE) {
+            const batch = termPromises.slice(i, i + BATCH_SIZE);
+            const batchResults = await Promise.all(batch);
+            enrichedAttributes.push(...batchResults);
+            
+            // Optional: Add small delay between batches to be gentle on WooCommerce server
+            if (i + BATCH_SIZE < termPromises.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
         
-        console.log(`✅ Loaded ${attributes.length} attributes with terms from WooCommerce`);
+        console.log(`✅ Loaded ${enrichedAttributes.length} attributes with terms from WooCommerce`);
         
         return {
             success: true,
-            attributes: attributes
+            attributes: enrichedAttributes
         };
         
     } catch (error) {

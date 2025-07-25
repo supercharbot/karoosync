@@ -817,6 +817,151 @@ async function createAttributeInWooCommerce(baseUrl, auth, attributeData) {
     return makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products/attributes', auth, {}, 'POST', attributeData);
 }
 
+/**
+ * Generate all possible variations from attributes
+ */
+function generateVariationsFromAttributes(attributes) {
+    console.log('🔄 Generating variations from attributes:', attributes);
+    
+    // Filter attributes that are marked for variations
+    const variationAttributes = attributes.filter(attr => attr.variation && attr.options && attr.options.length > 0);
+    
+    if (variationAttributes.length === 0) {
+        console.log('⚠️ No variation attributes found');
+        return [];
+    }
+    
+    // Generate all combinations
+    const combinations = generateCombinations(variationAttributes.map(attr => ({
+        name: attr.name,
+        slug: attr.slug || attr.name.toLowerCase().replace(/\s+/g, '-'),
+        id: attr.id,
+        options: attr.options
+    })));
+    
+    // Convert combinations to WooCommerce variation format
+    const variations = combinations.map((combination, index) => {
+        const attributes = combination.map(combo => ({
+            id: combo.id || 0,
+            name: combo.name,
+            option: combo.option
+        }));
+        
+        return {
+            regular_price: '',
+            sale_price: '',
+            stock_quantity: null,
+            manage_stock: false,
+            in_stock: true,
+            visible: true,
+            attributes: attributes,
+            sku: '',
+            weight: '',
+            dimensions: {
+                length: '',
+                width: '',
+                height: ''
+            },
+            image: null,
+            description: ''
+        };
+    });
+    
+    console.log(`✅ Generated ${variations.length} variations`);
+    return variations;
+}
+
+/**
+ * Generate all combinations from attribute options
+ */
+function generateCombinations(attributes) {
+    if (attributes.length === 0) return [];
+    if (attributes.length === 1) {
+        return attributes[0].options.map(option => [{
+            ...attributes[0],
+            option: option
+        }]);
+    }
+    
+    const [first, ...rest] = attributes;
+    const restCombinations = generateCombinations(rest);
+    const combinations = [];
+    
+    for (const option of first.options) {
+        for (const restCombo of restCombinations) {
+            combinations.push([{
+                ...first,
+                option: option
+            }, ...restCombo]);
+        }
+    }
+    
+    return combinations;
+}
+
+/**
+ * Enhanced create product function that handles variable products
+ */
+async function createVariableProduct(baseUrl, auth, productData) {
+    console.log('🛍️ Creating variable product:', productData.name);
+    
+    // Step 1: Create the parent variable product (without variations)
+    const parentData = {
+        ...productData,
+        type: 'variable'
+    };
+    
+    // Clean up parent data
+    delete parentData.variations;
+    delete parentData.regular_price;
+    delete parentData.sale_price;
+    
+    const parentProduct = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {}, 'POST', parentData);
+    console.log(`✅ Created parent variable product: ${parentProduct.id}`);
+    
+    // Step 2: Generate variations if attributes exist
+    let createdVariations = [];
+    if (productData.attributes && productData.attributes.length > 0) {
+        const generatedVariations = generateVariationsFromAttributes(productData.attributes);
+        
+        if (generatedVariations.length > 0) {
+            console.log(`🔄 Creating ${generatedVariations.length} variations...`);
+            
+            // Create variations in batches
+            const BATCH_SIZE = 10;
+            for (let i = 0; i < generatedVariations.length; i += BATCH_SIZE) {
+                const batch = generatedVariations.slice(i, i + BATCH_SIZE);
+                
+                for (const variation of batch) {
+                    try {
+                        const createdVariation = await makeWordPressRequest(
+                            baseUrl,
+                            `/wp-json/wc/v3/products/${parentProduct.id}/variations`,
+                            auth,
+                            {},
+                            'POST',
+                            variation
+                        );
+                        createdVariations.push(createdVariation);
+                        console.log(`✅ Created variation ${createdVariations.length}/${generatedVariations.length}`);
+                    } catch (error) {
+                        console.error(`❌ Failed to create variation:`, error);
+                    }
+                }
+                
+                if (i + BATCH_SIZE < generatedVariations.length) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+        }
+    }
+    
+    return {
+        ...parentProduct,
+        variations: createdVariations
+    };
+}
+
 async function processNewTags(baseUrl, auth, tags) {
     const processedTags = [];
     
@@ -923,7 +1068,11 @@ async function createProductInWooCommerce(url, username, appPassword, productDat
     const baseUrl = url.startsWith('http') ? url : `https://${url}`;
     const auth = Buffer.from(`${username}:${appPassword}`).toString('base64');
     
-    return makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {}, 'POST', productData);
+    if (productData.type === 'variable') {
+        return await createVariableProduct(baseUrl, auth, productData);
+    } else {
+        return makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {}, 'POST', productData);
+    }
 }
 
 async function createVariationsInWooCommerce(url, username, appPassword, productId, variations) {
@@ -997,15 +1146,18 @@ export async function createProductBackground(userId, productData, jobId) {
         let processedAttributes = [];
         if (productData.attributes && Array.isArray(productData.attributes) && productData.attributes.length > 0) {
             try {
-                const result = await processNewAttributes(
+                processedAttributes = await processNewAttributes(
                     credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`,
                     Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64'),
                     productData.attributes
                 );
-                processedAttributes = Array.isArray(result) ? result : [];
-            } catch (error) {
-                console.error('❌ Failed to process attributes:', error);
-                processedAttributes = [];
+                console.log(`✅ Processed ${processedAttributes.length} attributes`);
+                
+                // Update productData with processed attributes
+                productData.attributes = processedAttributes;
+            } catch (attrError) {
+                console.error('❌ Failed to process attributes:', attrError);
+                processedAttributes = productData.attributes; // Fallback to original
             }
         }
         
@@ -1039,23 +1191,13 @@ export async function createProductBackground(userId, productData, jobId) {
 
         await saveJobStatus(userId, jobId, 'processing', 80);
         
+        console.log(`🛍️ Creating ${processedProductData.type || 'simple'} product in WooCommerce...`);
         const newProduct = await createProductInWooCommerce(
             credentials.url,
             credentials.username,
             credentials.appPassword,
             processedProductData
         );
-        
-        // Handle variations for variable products
-        if (productData.type === 'variable' && productData.variations) {
-            await createVariationsInWooCommerce(
-                credentials.url,
-                credentials.username,
-                credentials.appPassword,
-                newProduct.id,
-                productData.variations
-            );
-        }
         
         await saveJobStatus(userId, jobId, 'processing', 95);
         
@@ -1090,7 +1232,8 @@ export async function createProductBackground(userId, productData, jobId) {
         await saveJobStatus(userId, jobId, 'completed', 100, { 
             product: newProduct,
             success: true,
-            productId: newProduct.id 
+            productId: newProduct.id,
+            message: `${processedProductData.type === 'variable' ? 'Variable' : 'Simple'} product created successfully${newProduct.variations ? ` with ${newProduct.variations.length} variations` : ''}`
         });
         
         console.log(`✅ Background job ${jobId} completed successfully`);

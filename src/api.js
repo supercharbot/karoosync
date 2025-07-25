@@ -3,28 +3,28 @@ const API_ENDPOINT = process.env.REACT_APP_API_ENDPOINT || 'https://ofbdn9zezl.e
 // Core API request function with better error handling
 async function makeRequest(url, options = {}) {
   try {
-    console.log('🌐 API Request:', url, options.method || 'GET');
+    console.log(`🌐 API Request: ${url} ${options.method || 'GET'}`);
     
     const response = await fetch(url, {
+      ...options,
       headers: {
         'Content-Type': 'application/json',
-        ...options.headers
+        ...options.headers,
       },
-      ...options
+      // Increase timeout for data loading operations
+      signal: AbortSignal.timeout(45000), // 45 seconds for WooCommerce data operations
     });
 
-    console.log('🌐 API Response:', response.status, response.statusText);
-
+    console.log(`🌐 API Response: ${response.status}`);
+    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('🌐 API Error Response:', errorText);
-      throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+      console.log(`🌐 API Error Response: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
 
-    const result = await response.json();
-    console.log('🌐 API Result:', result);
-    return result;
-    
+    const data = await response.json();
+    return data;
   } catch (error) {
     console.error('🌐 API Error:', error);
     throw error;
@@ -459,11 +459,29 @@ export async function loadWooCommerceTags(authToken) {
 export async function loadWooCommerceAttributes(authToken) {
   console.log('🔧 Loading WooCommerce attributes...');
   
-  const result = await makeRequest(`${API_ENDPOINT}?action=load-woocommerce-attributes`, {
-    headers: { Authorization: `Bearer ${authToken}` }
-  });
-
-  return result;
+  const maxRetries = 2;
+  let attempt = 0;
+  
+  while (attempt <= maxRetries) {
+    try {
+      const result = await makeRequest(`${API_ENDPOINT}?action=load-woocommerce-attributes`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      
+      return result;
+    } catch (error) {
+      attempt++;
+      
+      if (error.message.includes('504') && attempt <= maxRetries) {
+        console.log(`🔄 Retry attempt ${attempt}/${maxRetries} for attribute loading...`);
+        // Wait 2 seconds before retry
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+      
+      throw error;
+    }
+  }
 }
 
 export async function loadWooCommerceShippingClasses(authToken) {

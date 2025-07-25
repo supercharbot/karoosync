@@ -354,14 +354,6 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
       if (result.success) {
         const createdProduct = result.result.product;
         
-        // Upload images if any exist
-        if (images.length > 0) {
-          setSubmitStatus(`Uploading ${images.length} images...`);
-          await uploadProductImages(createdProduct.id, images, authToken, (progress) => {
-            setSubmitStatus(`Uploading images... ${progress}%`);
-          });
-        }
-        
         onProductCreated(createdProduct);
         onClose();
       } else {
