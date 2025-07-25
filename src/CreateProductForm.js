@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, Plus, Upload, Image, Package, ArrowRight, ArrowLeft, Save, Check, AlertCircle
-} from 'lucide-react';
+import { X, Plus, ArrowLeft, ArrowRight, Save, Upload, Image, Package, AlertCircle, Check, ChevronDown } from 'lucide-react';
 import BasicSettings from './BasicSettings';
 import AdvancedSettings from './AdvancedSettings';
 import { createProduct, loadWooCommerceAttributes, pollJobUntilComplete, uploadProductImages } from './api';
@@ -68,6 +66,10 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
   const [loadingAttributes, setLoadingAttributes] = useState(false);
   const [showAttributeSelector, setShowAttributeSelector] = useState(false);
   const [newAttributeValues, setNewAttributeValues] = useState(['', '', '']);
+  const [newAttributeName, setNewAttributeName] = useState('');
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  const [selectedVariations, setSelectedVariations] = useState(new Set());
+  const [showAllVariations, setShowAllVariations] = useState(false);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [submitStatus, setSubmitStatus] = useState('');
@@ -142,12 +144,12 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
   };
 
   const addNewAttribute = () => {
-    const nameInput = document.querySelector('input[placeholder*="Color"]');
-    const name = nameInput?.value.trim();
+    const name = newAttributeName.trim();
     const values = newAttributeValues.filter(v => v.trim());
     
     if (name && values.length > 0) {
       const newAttribute = {
+        id: -1, // Negative ID triggers global attribute creation
         name: name,
         options: values,
         visible: true,
@@ -155,9 +157,9 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
       };
       
       const newAttributes = [...(productData.attributes || []), newAttribute];
-      handleInputChange('attributes', newAttributes);
+      setProductData(prev => ({ ...prev, attributes: newAttributes }));
       
-      nameInput.value = '';
+      setNewAttributeName('');
       setNewAttributeValues(['', '', '']);
     }
   };
@@ -433,14 +435,32 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
     }));
   };
 
+  const toggleVariationSelection = (variationId) => {
+    setSelectedVariations(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(variationId)) {
+        newSet.delete(variationId);
+      } else {
+        newSet.add(variationId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllVariations = () => {
+    setSelectedVariations(new Set(productData.variations.map(v => v.id)));
+    setShowAllVariations(true);
+  };
+
+  const deselectAllVariations = () => {
+    setSelectedVariations(new Set());
+    setShowAllVariations(false);
+  };
+
   const applyBulkToVariations = (field, value) => {
-    setProductData(prev => ({
-      ...prev,
-      variations: prev.variations.map(variation => ({
-        ...variation,
-        [field]: value
-      }))
-    }));
+    selectedVariations.forEach(variationId => {
+      updateVariation(variationId, field, value);
+    });
   };
 
   // Freeze background when modal is open
@@ -665,6 +685,8 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
                     <label className="block text-sm font-medium text-gray-700 mb-2">Variation Name *</label>
                     <input
                       type="text"
+                      value={newAttributeName}
+                      onChange={(e) => setNewAttributeName(e.target.value)}
                       placeholder="e.g., Color, Size, Material"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900"
                     />
@@ -702,6 +724,14 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
                       Add Another Option
                     </button>
                   </div>
+                  
+                  <button
+                    onClick={addNewAttribute}
+                    disabled={!newAttributeName.trim() || newAttributeValues.filter(v => v.trim()).length === 0}
+                    className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium w-full mt-4"
+                  >
+                    Add Variation Type
+                  </button>
                   
                 </div>
               </div>
@@ -758,183 +788,243 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
 
             {productData.variations.length > 0 && (
               <>
-                {/* Bulk Actions */}
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h4 className="font-medium text-gray-900 mb-4">Bulk Actions</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Set Price for All</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              applyBulkToVariations('regular_price', e.target.value);
-                              e.target.value = '';
-                            }
-                          }}
-                        />
-                        <button
-                          onClick={(e) => {
-                            const input = e.target.parentElement.querySelector('input');
-                            if (input.value) {
-                              applyBulkToVariations('regular_price', input.value);
-                              input.value = '';
-                            }
-                          }}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          Apply
-                        </button>
-                      </div>
+                {/* Variation Controls */}
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                    <h4 className="font-medium text-gray-900">
+                      Variations ({productData.variations.length} total, {selectedVariations.size} selected)
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={selectAllVariations}
+                        className="px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                      >
+                        Show All
+                      </button>
+                      <button
+                        onClick={deselectAllVariations}
+                        className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        Hide All
+                      </button>
                     </div>
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Set Stock for All</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          placeholder="0"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              applyBulkToVariations('stock_quantity', e.target.value);
-                              applyBulkToVariations('manage_stock', true);
-                              e.target.value = '';
-                            }
-                          }}
-                        />
-                        <button
-                          onClick={(e) => {
-                            const input = e.target.parentElement.querySelector('input');
-                            if (input.value) {
-                              applyBulkToVariations('stock_quantity', input.value);
-                              applyBulkToVariations('manage_stock', true);
-                              input.value = '';
-                            }
-                          }}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          Apply
-                        </button>
-                      </div>
-                    </div>
+                  {/* Bulk Actions Dropdown */}
+                  <div className="relative mb-4">
+                    <button
+                      onClick={() => setShowBulkActions(!showBulkActions)}
+                      disabled={selectedVariations.size === 0}
+                      className="flex items-center justify-between w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="font-medium text-gray-900">
+                        Bulk Actions {selectedVariations.size > 0 ? `(${selectedVariations.size} selected)` : ''}
+                      </span>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${showBulkActions ? 'rotate-180' : ''}`} />
+                    </button>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Set SKU Prefix</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="SKU-"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              productData.variations.forEach((variation, index) => {
-                                updateVariation(variation.id, 'sku', `${e.target.value}${index + 1}`);
-                              });
-                              e.target.value = '';
-                            }
-                          }}
-                        />
-                        <button
-                          onClick={(e) => {
-                            const input = e.target.parentElement.querySelector('input');
-                            if (input.value) {
-                              productData.variations.forEach((variation, index) => {
-                                updateVariation(variation.id, 'sku', `${input.value}${index + 1}`);
-                              });
-                              input.value = '';
-                            }
-                          }}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          Apply
-                        </button>
+                    {showBulkActions && selectedVariations.size > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Set Price for Selected</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && e.target.value) {
+                                    applyBulkToVariations('regular_price', e.target.value);
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={(e) => {
+                                  const input = e.target.parentElement.querySelector('input');
+                                  if (input.value) {
+                                    applyBulkToVariations('regular_price', input.value);
+                                    input.value = '';
+                                  }
+                                }}
+                                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Set Stock for Selected</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                placeholder="Stock qty"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && e.target.value) {
+                                    applyBulkToVariations('stock_quantity', e.target.value);
+                                    applyBulkToVariations('manage_stock', true);
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={(e) => {
+                                  const input = e.target.parentElement.querySelector('input');
+                                  if (input.value) {
+                                    applyBulkToVariations('stock_quantity', input.value);
+                                    applyBulkToVariations('manage_stock', true);
+                                    input.value = '';
+                                  }
+                                }}
+                                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Set SKU Prefix</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder="SKU-"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && e.target.value) {
+                                    let counter = 1;
+                                    selectedVariations.forEach(variationId => {
+                                      updateVariation(variationId, 'sku', `${e.target.value}${counter}`);
+                                      counter++;
+                                    });
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={(e) => {
+                                  const input = e.target.parentElement.querySelector('input');
+                                  if (input.value) {
+                                    let counter = 1;
+                                    selectedVariations.forEach(variationId => {
+                                      updateVariation(variationId, 'sku', `${input.value}${counter}`);
+                                      counter++;
+                                    });
+                                    input.value = '';
+                                  }
+                                }}
+                                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    )}
+                  </div>
+
+                  {/* Variation Selection Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {productData.variations.map((variation) => (
+                      <label key={variation.id} className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedVariations.has(variation.id)}
+                          onChange={() => toggleVariationSelection(variation.id)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {Object.values(variation.attributes).join(' / ')}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {variation.regular_price ? `$${variation.regular_price}` : 'No price set'}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 </div>
 
-                {/* Variations List */}
-                <div className="space-y-4">
-                  <h4 className="font-medium text-gray-900">Individual Variations ({productData.variations.length})</h4>
-                  {productData.variations.map((variation, index) => (
-                    <div key={variation.id} className="border border-gray-200 rounded-lg p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <h5 className="font-medium text-gray-900">
-                          Variation {index + 1}: {Object.values(variation.attributes).join(' / ')}
-                        </h5>
-                      </div>
+                {/* Selected Variations Details */}
+                {selectedVariations.size > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-gray-900">Configure Selected Variations ({selectedVariations.size})</h4>
+                    {productData.variations
+                      .filter(variation => selectedVariations.has(variation.id))
+                      .map((variation, index) => (
+                        <div key={variation.id} className="border border-gray-200 rounded-lg p-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <h5 className="font-medium text-gray-900">
+                              {Object.values(variation.attributes).join(' / ')}
+                            </h5>
+                            <button
+                              onClick={() => toggleVariationSelection(variation.id)}
+                              className="text-red-600 hover:text-red-800 p-1"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Regular Price *</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={variation.regular_price}
-                            onChange={(e) => updateVariation(variation.id, 'regular_price', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="0.00"
-                          />
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Regular Price *</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={variation.regular_price}
+                                onChange={(e) => updateVariation(variation.id, 'regular_price', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                placeholder="0.00"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">SKU</label>
+                              <input
+                                type="text"
+                                value={variation.sku}
+                                onChange={(e) => updateVariation(variation.id, 'sku', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                placeholder="Enter SKU"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Stock Quantity</label>
+                              <input
+                                type="number"
+                                value={variation.stock_quantity}
+                                onChange={(e) => updateVariation(variation.id, 'stock_quantity', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <div className="flex items-center">
+                              <input
+                                id={`manage_stock_${variation.id}`}
+                                type="checkbox"
+                                checked={variation.manage_stock}
+                                onChange={(e) => updateVariation(variation.id, 'manage_stock', e.target.checked)}
+                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                              />
+                              <label htmlFor={`manage_stock_${variation.id}`} className="ml-2 text-sm text-gray-700">
+                                Manage stock for this variation
+                              </label>
+                            </div>
+                          </div>
                         </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">SKU</label>
-                          <input
-                            type="text"
-                            value={variation.sku}
-                            onChange={(e) => updateVariation(variation.id, 'sku', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="variation-sku"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Stock Status</label>
-                          <select
-                            value={variation.stock_status}
-                            onChange={(e) => updateVariation(variation.id, 'stock_status', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="instock">In stock</option>
-                            <option value="outofstock">Out of stock</option>
-                            <option value="onbackorder">On backorder</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {variation.manage_stock && (
-                        <div className="mt-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Stock Quantity</label>
-                          <input
-                            type="number"
-                            value={variation.stock_quantity}
-                            onChange={(e) => updateVariation(variation.id, 'stock_quantity', e.target.value)}
-                            className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="0"
-                          />
-                        </div>
-                      )}
-
-                      <div className="mt-4 flex items-center">
-                        <input
-                          type="checkbox"
-                          id={`manage_stock_${variation.id}`}
-                          checked={variation.manage_stock}
-                          onChange={(e) => updateVariation(variation.id, 'manage_stock', e.target.checked)}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label htmlFor={`manage_stock_${variation.id}`} className="ml-2 text-sm text-gray-700">
-                          Manage stock for this variation
-                        </label>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      ))}
+                  </div>
+                )}
               </>
             )}
           </div>
