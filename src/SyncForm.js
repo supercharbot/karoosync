@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Store, LogOut, ExternalLink } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { initializeWordPressAuth, syncWordPressStore } from './api';
 import LoadingScreen from './LoadingScreen';
+import { fetchUserAttributes } from 'aws-amplify/auth';
 
 const SyncForm = ({ onSyncComplete, error, setError }) => {
   const { user, logout, getAuthToken } = useAuth();
@@ -10,6 +11,24 @@ const SyncForm = ({ onSyncComplete, error, setError }) => {
   const [authUrl, setAuthUrl] = useState('');
   const [showAuthFlow, setShowAuthFlow] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [userName, setUserName] = useState('');
+
+  // Load user name from Cognito
+  useEffect(() => {
+    const loadUserName = async () => {
+      try {
+        const attributes = await fetchUserAttributes();
+        setUserName(attributes.name || attributes.email || 'User');
+      } catch (error) {
+        console.error('Failed to load user name:', error);
+        setUserName('User');
+      }
+    };
+
+    if (user) {
+      loadUserName();
+    }
+  }, [user]);
 
   const handleInitialSubmit = async (e) => {
     e.preventDefault();
@@ -75,10 +94,10 @@ const SyncForm = ({ onSyncComplete, error, setError }) => {
               <Store className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Connect Your Store</h1>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">Connect your WooCommerce store using WordPress authentication</p>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">Connect your WooCommerce store below by logging into WordPress and authenticating our app</p>
             
             <div className="flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-              <span>Logged in as {user?.username}</span>
+              <span>Logged in as {userName}</span>
               <button
                 onClick={logout}
                 className="ml-2 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 flex items-center"

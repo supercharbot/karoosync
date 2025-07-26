@@ -731,6 +731,10 @@ async function getUserCredentials(userId) {
         const compressed = await response.Body.transformToByteArray();
         return JSON.parse(zlib.gunzipSync(compressed).toString());
     } catch (error) {
+        // Handle the case where credentials don't exist (normal for new users)
+        if (error.name === 'NoSuchKey') {
+            return null;
+        }
         throw new Error(`Failed to get user credentials: ${error.message}`);
     }
 }
