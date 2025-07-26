@@ -393,13 +393,9 @@ const BasicSettings = ({
               Shipping Class
             </label>
             <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={editData.shipping_class || ''}
-                onChange={(e) => handleInputChange('shipping_class', e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                placeholder="Shipping class"
-              />
+              <div className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-600 text-gray-700 dark:text-gray-300 min-h-[42px] flex items-center">
+                {editData.shipping_class || 'No shipping class selected'}
+              </div>
               <button
                 onClick={fetchExistingShippingClasses}
                 disabled={loadingShippingClasses}

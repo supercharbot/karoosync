@@ -956,10 +956,12 @@ async function createVariableProduct(baseUrl, auth, productData) {
         }
     }
     
-    return {
-        ...parentProduct,
-        variations: createdVariations
-    };
+    // Don't fetch parent - WooCommerce returns variations as IDs which overrides our full objects
+    const result = { ...parentProduct };
+    result.variations = createdVariations; // Full objects, not just IDs
+    
+    console.log(`🔍 Returning variable product with ${createdVariations.length} full variation objects`);
+    return result;
 }
 
 async function processNewTags(baseUrl, auth, tags) {
@@ -1199,8 +1201,14 @@ export async function createProductBackground(userId, productData, jobId) {
             processedProductData
         );
         
+        console.log(`🔍 DEBUG: newProduct.variations type and content:`, typeof newProduct.variations, newProduct.variations);
+        console.log(`🔍 DEBUG: newProduct.variations[0] structure:`, newProduct.variations?.[0]);
+        
         await saveJobStatus(userId, jobId, 'processing', 95);
         
+        // Before S3 save, log the ENTIRE newProduct structure
+        console.log(`🔍 FULL newProduct structure:`, JSON.stringify(newProduct, null, 2));
+
         // Update S3 storage
         try {
             const existingData = await s3Client.send(new GetObjectCommand({
@@ -1210,6 +1218,9 @@ export async function createProductBackground(userId, productData, jobId) {
             const compressed = await existingData.Body.transformToByteArray();
             const data = JSON.parse(zlib.gunzipSync(compressed).toString());
             
+            // Ensure variations are included for variable products
+            console.log(`🔍 Saving to S3 - Product type: ${newProduct.type}, Variations count: ${newProduct.variations?.length || 0}`);
+            console.log(`🔍 DEBUG: About to save to S3 - variations:`, newProduct.variations);
             data.products[newProduct.id] = newProduct;
             data.lastUpdated = new Date().toISOString();
             
@@ -1224,7 +1235,17 @@ export async function createProductBackground(userId, productData, jobId) {
                 ContentEncoding: 'gzip'
             }));
             
+            console.log(`🔍 DEBUG: Before updateCategoryIndex - variations:`, newProduct.variations?.length);
             await updateCategoryIndex(userId, newProduct.id, newProduct.categories);
+            
+            // Re-check S3 after category index update
+            const checkData = await s3Client.send(new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: `users/${userId}/products.json.gz`
+            }));
+            const checkCompressed = await checkData.Body.transformToByteArray();
+            const checkJson = JSON.parse(zlib.gunzipSync(checkCompressed).toString());
+            console.log(`🔍 DEBUG: After updateCategoryIndex - S3 variations:`, checkJson.products[newProduct.id]?.variations);
         } catch (s3Error) {
             console.error('❌ Failed to update S3 storage:', s3Error);
         }

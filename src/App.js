@@ -165,11 +165,29 @@ const App = () => {
   };
 
   // Handle sync completion
-  const handleSyncComplete = (syncResult) => {
+  const handleSyncComplete = async (syncResult) => {
     console.log('🔍 Sync completed successfully:', syncResult);
-    setUserData(syncResult);
     setSyncId(null);
-    setCurrentView('main');
+    
+    // Fetch fresh data from server instead of using sync result
+    try {
+      const authToken = await getAuthToken();
+      const freshData = await checkUserData(authToken);
+      
+      if (freshData.success && freshData.hasData) {
+        console.log('🔍 Fresh data loaded after sync completion');
+        setUserData(freshData);
+        setCurrentView('main');
+      } else {
+        console.log('🔍 No fresh data found after sync');
+        setCurrentView('sync');
+      }
+    } catch (err) {
+      console.error('🔍 Error loading fresh data after sync:', err);
+      // Fallback to sync result if fresh data fetch fails
+      setUserData(syncResult);
+      setCurrentView('main');
+    }
   };
 
   // Handle sync errors

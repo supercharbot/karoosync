@@ -591,6 +591,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
               handleInputChange={handleInputChange}
               isMobile={false}
               isCreating={true}
+              hideAttributes={productType === 'variable'}
             />
           </div>
         );

@@ -3,7 +3,7 @@ import { X, Plus } from 'lucide-react';
 import { loadWooCommerceTags, loadWooCommerceAttributes, searchProducts } from './api';
 import { useAuth } from './AuthContext';
 
-const AdvancedSettings = ({ editData, handleInputChange, isMobile, isCreating = false }) => {
+const AdvancedSettings = ({ editData, handleInputChange, isMobile, isCreating = false, hideAttributes = false }) => {
   const { getAuthToken } = useAuth();
   // State for input fields
   const [tagInput, setTagInput] = useState('');
@@ -23,7 +23,7 @@ const AdvancedSettings = ({ editData, handleInputChange, isMobile, isCreating = 
   const [availableAttributes, setAvailableAttributes] = useState([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [loadingAttributes, setLoadingAttributes] = useState(false);
-const [showUpsellSearch, setShowUpsellSearch] = useState(false);
+  const [showUpsellSearch, setShowUpsellSearch] = useState(false);
   const [showCrossSellSearch, setShowCrossSellSearch] = useState(false);
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -234,7 +234,7 @@ const [showUpsellSearch, setShowUpsellSearch] = useState(false);
       
       {/* Tags & Attributes Section */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6 space-y-4">
-        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>Tags & Attributes</h3>
+        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-medium text-gray-900 dark:text-gray-100`}>{hideAttributes ? 'Tags' : 'Tags & Attributes'}</h3>
         
         {/* Tags */}
         <div>
@@ -332,6 +332,7 @@ const [showUpsellSearch, setShowUpsellSearch] = useState(false);
         </div>
 
         {/* Attributes */}
+        {!hideAttributes && (
         <div className="border-t border-gray-200 dark:border-gray-600 pt-4">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Product Attributes</label>
           
@@ -455,6 +456,7 @@ const [showUpsellSearch, setShowUpsellSearch] = useState(false);
             </div>
           </div>
         </div>
+        )}
 
         {/* Published Date */}
         <div>
