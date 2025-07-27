@@ -647,10 +647,7 @@ const handleArchiveProduct = async (product, e) => {
         onClose={() => setShowCreateProductModal(false)}
         onProductCreated={(product) => {
           setShowCreateProductModal(false);
-          if (onDataUpdate) {
-            onDataUpdate();
-          }
-          // Refresh current view
+          // Just refresh current category products (no full page reload)
           if (selectedCategory) {
             loadProducts();
           }

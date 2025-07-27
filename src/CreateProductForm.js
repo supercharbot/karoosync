@@ -4,6 +4,7 @@ import BasicSettings from './BasicSettings';
 import AdvancedSettings from './AdvancedSettings';
 import { createProduct, loadWooCommerceAttributes, pollJobUntilComplete, uploadProductImages } from './api';
 import { useAuth } from './AuthContext';
+import VariableProductView from './VariableProductView';
 
 const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory }) => {
   const { getAuthToken } = useAuth();
@@ -407,19 +408,30 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
 
     const combinations = generateCombinations(attributeOptions);
     
-    const variations = combinations.map((combo, index) => ({
-      id: `temp-${Date.now()}-${index}`,
-      attributes: combo,
-      regular_price: '',
-      sale_price: '',
-      sku: '',
-      stock_status: 'instock',
-      manage_stock: false,
-      stock_quantity: '',
-      weight: '',
-      image: null,
-      description: ''
-    }));
+    const variations = combinations.map((combo, index) => {
+      const attributes = Object.entries(combo).map(([name, option]) => {
+        const attr = productData.attributes.find(a => a.name === name);
+        return {
+          id: attr?.id || 0,
+          name: name,
+          option: option
+        };
+      });
+      
+      return {
+        id: `temp-${Date.now()}-${index}`,
+        attributes: attributes,
+        regular_price: '',
+        sale_price: '',
+        sku: '',
+        stock_status: 'instock',
+        manage_stock: false,
+        stock_quantity: '',
+        weight: '',
+        image: null,
+        description: ''
+      };
+    });
 
     setProductData(prev => ({ ...prev, variations }));
   };
@@ -941,7 +953,10 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
                         />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 truncate">
-                            {Object.values(variation.attributes).join(' / ')}
+                            {Array.isArray(variation.attributes) 
+                              ? variation.attributes.map(attr => `${attr.name}: ${attr.option}`).join(' / ')
+                              : Object.entries(variation.attributes).map(([name, option]) => `${name}: ${option}`).join(' / ')
+                            }
                           </p>
                           <p className="text-xs text-gray-500">
                             {variation.regular_price ? `$${variation.regular_price}` : 'No price set'}

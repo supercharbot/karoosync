@@ -1029,6 +1029,9 @@ async function processNewAttributes(baseUrl, auth, attributes) {
                     }
                 }
                 
+                // Wait for WooCommerce to process the new attribute
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
                 processedAttributes.push({
                     id: newAttribute.id,
                     name: newAttribute.name,
@@ -1235,7 +1238,9 @@ export async function createProductBackground(userId, productData, jobId) {
                 ContentEncoding: 'gzip'
             }));
             
-            console.log(`🔍 DEBUG: Before updateCategoryIndex - variations:`, newProduct.variations?.length);
+            console.log(`🔍 DEBUG: Before updateCategoryIndex - variations count:`, newProduct.variations?.length);
+            console.log(`🔍 DEBUG: Before updateCategoryIndex - first variation:`, JSON.stringify(newProduct.variations?.[0], null, 2));
+            
             await updateCategoryIndex(userId, newProduct.id, newProduct.categories);
             
             // Re-check S3 after category index update
@@ -1246,6 +1251,7 @@ export async function createProductBackground(userId, productData, jobId) {
             const checkCompressed = await checkData.Body.transformToByteArray();
             const checkJson = JSON.parse(zlib.gunzipSync(checkCompressed).toString());
             console.log(`🔍 DEBUG: After updateCategoryIndex - S3 variations:`, checkJson.products[newProduct.id]?.variations);
+            console.log(`🔍 DEBUG: After updateCategoryIndex - first variation type:`, typeof checkJson.products[newProduct.id]?.variations?.[0]);
         } catch (s3Error) {
             console.error('❌ Failed to update S3 storage:', s3Error);
         }
@@ -1789,6 +1795,15 @@ export async function handleProduct(event, userId) {
             }));
             const compressed = await existingData.Body.transformToByteArray();
             const data = JSON.parse(zlib.gunzipSync(compressed).toString());
+            
+            // For variable products, preserve existing variation objects
+            if (updatedProduct.type === 'variable' && data.products[productId]?.variations) {
+                const existingVariations = data.products[productId].variations;
+                if (Array.isArray(existingVariations) && existingVariations.length > 0 && typeof existingVariations[0] === 'object') {
+                    console.log('🔍 Preserving existing variation objects during refresh');
+                    updatedProduct.variations = existingVariations;
+                }
+            }
             
             data.products[productId] = updatedProduct;
             data.lastUpdated = new Date().toISOString();
