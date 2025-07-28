@@ -581,9 +581,9 @@ const VariableProductView = ({
                     </div>
                   )}
 
-                  {/* Template Variation - Separate from actual variations */}
+                  {/* Template Variation Header */}
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700 p-4 mb-6">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between">
                       <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center">
                         <Package2 className="w-5 h-5 mr-2" />
                         Template Variation
@@ -592,160 +592,196 @@ const VariableProductView = ({
                         Configure once, apply to all
                       </div>
                     </div>
+                  </div>
 
-                    {/* Render the exact same expanded variation content but for template */}
-                    <div className="mt-6 space-y-6">
-                      {/* Image Management Section */}
-                      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 mb-6">
-                        <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                          <Image className="w-5 h-5 mr-2" />
-                          Variation Image
-                        </h4>
-                        
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                          {/* Current Image Display */}
-                          <div className="flex flex-col items-center">
-                            <div className="w-48 h-48 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 relative group">
-                              {bulkData.image?.src ? (
-                                <>
-                                  <img
-                                    src={bulkData.image.src}
-                                    alt={bulkData.image.alt || 'Template image'}
-                                    className="w-full h-full object-cover rounded-lg"
-                                  />
+                  {/* PASTE THE EXACT VARIATION CODE HERE - from your paste.txt file */}
+                  <div className="mt-6 space-y-6">
+                    {/* Image Management Section - Side by Side Layout */}
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 mb-6">
+                      <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                        <Image className="w-5 h-5 mr-2" />
+                        Variation Image
+                      </h4>
+                      
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Current Image Display */}
+                        <div className="flex flex-col items-center">
+                          <div className="w-48 h-48 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 relative group">
+                            {bulkData.image?.src ? (
+                              <>
+                                <img
+                                  src={bulkData.image.src}
+                                  alt={bulkData.image.alt || 'Variation image'}
+                                  className="w-full h-full object-cover rounded-lg"
+                                />
+                                {/* Delete Image Overlay */}
+                                <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                   <button
                                     onClick={() => handleBulkInputChange('image', null)}
-                                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-full transition-colors"
                                   >
-                                    <X className="w-4 h-4" />
+                                    <X className="w-5 h-5" />
                                   </button>
-                                </>
-                              ) : (
-                                <div className="text-center">
-                                  <Image className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                                  <p className="text-sm text-gray-600 dark:text-gray-400">No image set</p>
                                 </div>
-                              )}
-                            </div>
+                              </>
+                            ) : (
+                              <div className="text-center">
+                                <Image className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+                                <p className="text-xs text-gray-500 dark:text-gray-400">No image</p>
+                              </div>
+                            )}
                           </div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 text-center">
+                            Current variation image
+                          </p>
+                        </div>
 
-                          {/* Image Upload Controls */}
-                          <div className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Image URL
-                              </label>
+                        {/* Image Upload Controls */}
+                        <div className="space-y-4">
+                          {/* Image URL Input */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Image URL
+                            </label>
+                            <div className="flex space-x-2">
                               <input
                                 type="url"
-                                value={bulkData.image?.src || ''}
-                                onChange={(e) => handleBulkInputChange('image', 
-                                  e.target.value ? { src: e.target.value, alt: bulkData.image?.alt || '' } : null
-                                )}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                                 placeholder="https://example.com/image.jpg"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Alt Text
-                              </label>
-                              <input
-                                type="text"
-                                value={bulkData.image?.alt || ''}
-                                onChange={(e) => handleBulkInputChange('image', {
-                                  ...bulkData.image,
-                                  alt: e.target.value
-                                })}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                placeholder="Describe the image for accessibility"
-                              />
-                            </div>
-
-                            <div className="text-center">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const file = e.target.files[0];
-                                  if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = (e) => {
-                                      handleBulkInputChange('image', {
-                                        src: e.target.result,
-                                        alt: bulkData.image?.alt || file.name
-                                      });
-                                    };
-                                    reader.readAsDataURL(file);
+                                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleBulkInputChange('image', { src: e.target.value, alt: 'Template variation image' });
+                                    e.target.value = '';
                                   }
                                 }}
-                                className="hidden"
-                                id="template-image-upload"
                               />
-                              <label
-                                htmlFor="template-image-upload"
-                                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors"
+                              <button
+                                onClick={(e) => {
+                                  const input = e.target.parentElement.querySelector('input');
+                                  handleBulkInputChange('image', { src: input.value, alt: 'Template variation image' });
+                                  input.value = '';
+                                }}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
                               >
-                                <Upload className="w-4 h-4 mr-2" />
-                                Upload Image
+                                Add
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* File Upload */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Upload from Device
+                            </label>
+                            <div className="flex items-center justify-center w-full">
+                              <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 transition-colors">
+                                <div className="flex flex-col items-center justify-center pt-2 pb-3">
+                                  <Upload className="w-6 h-6 mb-1 text-gray-400" />
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    <span className="font-semibold">Click to upload</span>
+                                  </p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, GIF up to 10MB</p>
+                                </div>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (file) {
+                                      const reader = new FileReader();
+                                      reader.onload = (e) => {
+                                        handleBulkInputChange('image', {
+                                          src: e.target.result,
+                                          alt: 'Template variation image'
+                                        });
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }
+                                  }}
+                                />
                               </label>
                             </div>
                           </div>
+
+                          {/* Quick Actions */}
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleBulkInputChange('image', null)}
+                              className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 px-3 py-2 rounded-lg transition-colors text-sm flex items-center justify-center"
+                            >
+                              <X className="w-4 h-4 mr-1" />
+                              Remove Image
+                            </button>
+                          </div>
                         </div>
                       </div>
+                    </div>
 
-                      {/* Status Toggles */}
-                      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                          <ToggleLeft className="w-5 h-5 mr-2" />
-                          Status Settings
-                        </h4>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <button
-                            onClick={() => handleBulkInputChange('status', bulkData.status === 'publish' ? 'private' : 'publish')}
-                            className={`flex items-center justify-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                              bulkData.status === 'publish'
-                                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 text-green-700 dark:text-green-400'
-                                : 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-                            }`}
-                          >
-                            {bulkData.status === 'publish' ? (
-                              <Eye className="w-4 h-4" />
-                            ) : (
-                              <EyeOff className="w-4 h-4" />
-                            )}
-                            <span className="text-sm font-medium">
-                              {bulkData.status === 'publish' ? 'Published' : 'Private'}
-                            </span>
-                          </button>
+                    {/* Toggle Buttons */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      {/* Enabled Toggle */}
+                      <button
+                        onClick={() => handleBulkInputChange('status', bulkData.status === 'publish' ? 'private' : 'publish')}
+                        className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-lg transition-colors ${
+                          bulkData.status === 'publish'
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300'
+                        }`}
+                      >
+                        {bulkData.status === 'publish' ? (
+                          <ToggleRight className="w-4 h-4" />
+                        ) : (
+                          <ToggleLeft className="w-4 h-4" />
+                        )}
+                        <span className="text-sm font-medium">
+                          {bulkData.status === 'publish' ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </button>
 
-                          <button
-                            onClick={() => handleBulkInputChange('virtual', !bulkData.virtual)}
-                            className={`flex items-center justify-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                              bulkData.virtual
-                                ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-400'
-                                : 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-                            }`}
-                          >
-                            <Cloud className="w-4 h-4" />
-                            <span className="text-sm font-medium">Virtual</span>
-                          </button>
+                      {/* Downloadable Toggle */}
+                      <button
+                        onClick={() => handleBulkInputChange('downloadable', !bulkData.downloadable)}
+                        className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-lg transition-colors ${
+                          bulkData.downloadable
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300'
+                        }`}
+                      >
+                        <Download className="w-4 h-4" />
+                        <span className="text-sm font-medium">Downloadable</span>
+                      </button>
 
-                          <button
-                            onClick={() => handleBulkInputChange('downloadable', !bulkData.downloadable)}
-                            className={`flex items-center justify-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                              bulkData.downloadable
-                                ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-400'
-                                : 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-                            }`}
-                          >
-                            <Download className="w-4 h-4" />
-                            <span className="text-sm font-medium">Downloadable</span>
-                          </button>
-                        </div>
-                      </div>
+                      {/* Virtual Toggle */}
+                      <button
+                        onClick={() => handleBulkInputChange('virtual', !bulkData.virtual)}
+                        className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-lg transition-colors ${
+                          bulkData.virtual
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300'
+                        }`}
+                      >
+                        <Cloud className="w-4 h-4" />
+                        <span className="text-sm font-medium">Virtual</span>
+                      </button>
 
+                      {/* Manage Stock Toggle */}
+                      <button
+                        onClick={() => handleBulkInputChange('manage_stock', !bulkData.manage_stock)}
+                        className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-lg transition-colors ${
+                          bulkData.manage_stock
+                            ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300'
+                        }`}
+                      >
+                        <Package className="w-4 h-4" />
+                        <span className="text-sm font-medium">Manage Stock</span>
+                      </button>
+                    </div>
+
+                    {/* Variation Fields - Organized into Sections */}
+                    <div className="space-y-8">
+                      
                       {/* Basic Information Section */}
                       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                         <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
@@ -765,7 +801,7 @@ const VariableProductView = ({
                                 value={bulkData.sku || ''}
                                 onChange={(e) => handleBulkInputChange('sku', e.target.value)}
                                 className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                placeholder="template-sku"
+                                placeholder="variation-sku"
                               />
                             </div>
                           </div>
@@ -808,28 +844,15 @@ const VariableProductView = ({
                         </div>
                       </div>
 
-                      {/* Sale Settings */}
-                      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                          <Zap className="w-5 h-5 mr-2" />
-                          Sale Settings
-                        </h4>
-                        <SaleSettings
-                          editData={bulkData}
-                          handleInputChange={handleBulkInputChange}
-                          isMobile={false}
-                        />
-                      </div>
-
                       {/* Inventory Management Section */}
                       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                         <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
                           <Package className="w-5 h-5 mr-2" />
                           Inventory Management
                         </h4>
-                        
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Stock Status (shown when not managing stock) */}
+                          {!bulkData.manage_stock && (
                             <div>
                               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Stock Status
@@ -844,64 +867,55 @@ const VariableProductView = ({
                                 <option value="onbackorder">On Backorder</option>
                               </select>
                             </div>
+                          )}
 
-                            <div className="flex items-center">
-                              <button
-                                onClick={() => handleBulkInputChange('manage_stock', !bulkData.manage_stock)}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-lg border-2 transition-all ${
-                                  bulkData.manage_stock
-                                    ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-400'
-                                    : 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-                                }`}
-                              >
-                                <Package className="w-4 h-4" />
-                                <span className="text-sm font-medium">Manage Stock</span>
-                              </button>
-                            </div>
-                          </div>
-
+                          {/* Stock Quantity (shown when managing stock) */}
                           {bulkData.manage_stock && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  Stock Quantity
-                                </label>
-                                <input
-                                  type="number"
-                                  value={bulkData.stock_quantity || ''}
-                                  onChange={(e) => handleBulkInputChange('stock_quantity', e.target.value)}
-                                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                  placeholder="0"
-                                />
-                              </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Stock Quantity
+                              </label>
+                              <input
+                                type="number"
+                                value={bulkData.stock_quantity || ''}
+                                onChange={(e) => handleBulkInputChange('stock_quantity', e.target.value)}
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                placeholder="0"
+                              />
+                            </div>
+                          )}
 
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  Allow Backorders
-                                </label>
-                                <select
-                                  value={bulkData.backorders || 'no'}
-                                  onChange={(e) => handleBulkInputChange('backorders', e.target.value)}
-                                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                >
-                                  <option value="no">Do not allow</option>
-                                  <option value="notify">Allow, but notify customer</option>
-                                  <option value="yes">Allow</option>
-                                </select>
-                              </div>
+                          {/* Allow Backorders (shown when managing stock) */}
+                          {bulkData.manage_stock && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Allow Backorders
+                              </label>
+                              <select
+                                value={bulkData.backorders || 'no'}
+                                onChange={(e) => handleBulkInputChange('backorders', e.target.value)}
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              >
+                                <option value="no">Do not allow</option>
+                                <option value="notify">Allow, but notify customer</option>
+                                <option value="yes">Allow</option>
+                              </select>
+                            </div>
+                          )}
 
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  Low Stock Threshold
-                                </label>
-                                <input
-                                  type="number"
-                                  value={bulkData.low_stock_amount || ''}
-                                  onChange={(e) => handleBulkInputChange('low_stock_amount', e.target.value)}
-                                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                  placeholder="0"
-                                />
-                              </div>
+                          {/* Low Stock Threshold (shown when managing stock) */}
+                          {bulkData.manage_stock && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Low Stock Threshold
+                              </label>
+                              <input
+                                type="number"
+                                value={bulkData.low_stock_amount || ''}
+                                onChange={(e) => handleBulkInputChange('low_stock_amount', e.target.value)}
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                placeholder="0"
+                              />
                             </div>
                           )}
                         </div>
@@ -914,76 +928,103 @@ const VariableProductView = ({
                             <Truck className="w-5 h-5 mr-2" />
                             Shipping
                           </h4>
-                          
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  Weight (optional)
-                                </label>
-                                <div className="relative">
-                                  <Ruler className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={bulkData.weight || ''}
-                                    onChange={(e) => handleBulkInputChange('weight', e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                    placeholder="0.00"
-                                  />
-                                </div>
+                            {/* Weight */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Weight (kg)
+                              </label>
+                              <div className="relative">
+                                <Ruler className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={bulkData.weight || ''}
+                                  onChange={(e) => handleBulkInputChange('weight', e.target.value)}
+                                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                  placeholder="0.00"
+                                />
                               </div>
                             </div>
 
-                            <div className="space-y-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  Dimensions (L × W × H)
-                                </label>
-                                <div className="grid grid-cols-3 gap-2">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={bulkData.dimensions?.length || ''}
-                                    onChange={(e) => handleBulkInputChange('dimensions', {
-                                      ...bulkData.dimensions,
-                                      length: e.target.value
-                                    })}
-                                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                    placeholder="Length"
-                                  />
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={bulkData.dimensions?.width || ''}
-                                    onChange={(e) => handleBulkInputChange('dimensions', {
-                                      ...bulkData.dimensions,
-                                      width: e.target.value
-                                    })}
-                                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                    placeholder="Width"
-                                  />
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={bulkData.dimensions?.height || ''}
-                                    onChange={(e) => handleBulkInputChange('dimensions', {
-                                      ...bulkData.dimensions,
-                                      height: e.target.value
-                                    })}
-                                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                    placeholder="Height"
-                                  />
-                                </div>
-                              </div>
+                            {/* Shipping Class */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Shipping Class
+                              </label>
+                              <select
+                                value={bulkData.shipping_class || ''}
+                                onChange={(e) => handleBulkInputChange('shipping_class', e.target.value)}
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              >
+                                <option value="">No shipping class</option>
+                                {shippingClasses.map((shippingClass) => (
+                                  <option key={shippingClass.id} value={shippingClass.slug}>
+                                    {shippingClass.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Dimensions */}
+                          <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Dimensions (cm)
+                            </label>
+                            <div className="grid grid-cols-3 gap-4">
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={bulkData.dimensions?.length || ''}
+                                onChange={(e) => handleBulkInputChange('dimensions', { ...bulkData.dimensions, length: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                placeholder="Length"
+                              />
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={bulkData.dimensions?.width || ''}
+                                onChange={(e) => handleBulkInputChange('dimensions', { ...bulkData.dimensions, width: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                placeholder="Width"
+                              />
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={bulkData.dimensions?.height || ''}
+                                onChange={(e) => handleBulkInputChange('dimensions', { ...bulkData.dimensions, height: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                placeholder="Height"
+                              />
                             </div>
                           </div>
                         </div>
                       )}
 
+                      {/* Content Section */}
+                      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                        <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                          <FileText className="w-5 h-5 mr-2" />
+                          Content
+                        </h4>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Description
+                          </label>
+                          <textarea
+                            value={bulkData.description || ''}
+                            onChange={(e) => handleBulkInputChange('description', e.target.value)}
+                            rows={4}
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                            placeholder="Variation description..."
+                          />
+                        </div>
+                      </div>
+
                       {/* Downloadable Files Section */}
                       {bulkData.downloadable && (
-                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-6">
                           <div className="flex items-center justify-between mb-4">
                             <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center">
                               <Download className="w-5 h-5 mr-2" />
@@ -994,111 +1035,126 @@ const VariableProductView = ({
                                 const newDownloads = [...(bulkData.downloads || []), { id: Date.now(), name: '', file: '' }];
                                 handleBulkInputChange('downloads', newDownloads);
                               }}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm flex items-center"
                             >
-                              <Plus className="w-4 h-4" />
+                              <Plus className="w-4 h-4 mr-1" />
                               Add File
                             </button>
                           </div>
-
+                          
                           <div className="space-y-4">
-                            {(bulkData.downloads || []).map((download, index) => (
-                              <div key={download.id || index} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                            {(bulkData.downloads || []).map((download, fileIndex) => (
+                              <div key={fileIndex} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                                 <div className="flex items-center justify-between mb-3">
-                                  <h5 className="font-medium text-gray-900 dark:text-gray-100">File {index + 1}</h5>
+                                  <h5 className="font-medium text-gray-900 dark:text-gray-100">
+                                    File {fileIndex + 1}
+                                  </h5>
                                   <button
                                     onClick={() => {
-                                      const newDownloads = bulkData.downloads.filter((_, i) => i !== index);
+                                      const newDownloads = bulkData.downloads.filter((_, index) => index !== fileIndex);
                                       handleBulkInputChange('downloads', newDownloads);
                                     }}
-                                    className="text-red-600 hover:text-red-800"
+                                    className="text-red-600 hover:text-red-700 p-1"
                                   >
                                     <X className="w-4 h-4" />
                                   </button>
                                 </div>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-3">
+                                  {/* File Name */}
                                   <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                       File Name
                                     </label>
                                     <input
                                       type="text"
                                       value={download.name || ''}
                                       onChange={(e) => {
-                                        const newDownloads = [...bulkData.downloads];
-                                        newDownloads[index] = { ...newDownloads[index], name: e.target.value };
+                                        const newDownloads = [...(bulkData.downloads || [])];
+                                        newDownloads[fileIndex] = { ...newDownloads[fileIndex], name: e.target.value };
                                         handleBulkInputChange('downloads', newDownloads);
                                       }}
                                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                      placeholder="download-file.pdf"
+                                      placeholder="File name"
                                     />
                                   </div>
-                                  
+
+                                  {/* File URL */}
                                   <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                       File URL
                                     </label>
-                                    <div className="flex gap-2">
-                                      <input
-                                        type="url"
-                                        value={download.file || ''}
-                                        onChange={(e) => {
-                                          const newDownloads = [...bulkData.downloads];
-                                          newDownloads[index] = { ...newDownloads[index], file: e.target.value };
-                                          handleBulkInputChange('downloads', newDownloads);
-                                        }}
-                                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                        placeholder="https://example.com/file.pdf"
-                                      />
-                                      <input
-                                        type="file"
-                                        onChange={(e) => {
-                                          const file = e.target.files[0];
-                                          if (file) {
-                                            const reader = new FileReader();
-                                            reader.onload = (e) => {
-                                              const newDownloads = [...bulkData.downloads];
-                                              newDownloads[index] = { 
-                                                ...newDownloads[index], 
-                                                name: file.name,
-                                                file: e.target.result,
-                                                type: file.type,
-                                                size: file.size
+                                    <input
+                                      type="url"
+                                      value={download.file || ''}
+                                      onChange={(e) => {
+                                        const newDownloads = [...(bulkData.downloads || [])];
+                                        newDownloads[fileIndex] = { ...newDownloads[fileIndex], file: e.target.value };
+                                        handleBulkInputChange('downloads', newDownloads);
+                                      }}
+                                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                      placeholder="https://example.com/file.pdf"
+                                    />
+                                  </div>
+
+                                  {/* File Upload Alternative */}
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                      Or Upload from Device
+                                    </label>
+                                    <div className="flex items-center justify-center w-full">
+                                      <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 transition-colors">
+                                        <div className="flex items-center justify-center">
+                                          <Upload className="w-5 h-5 mr-2 text-gray-400" />
+                                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                                            <span className="font-semibold">Click to upload</span> or drag and drop
+                                          </p>
+                                        </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                          Any file type up to 50MB
+                                        </p>
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            if (file) {
+                                              const reader = new FileReader();
+                                              reader.onload = (e) => {
+                                                const newDownloads = [...(bulkData.downloads || [])];
+                                                newDownloads[fileIndex] = { 
+                                                  ...newDownloads[fileIndex], 
+                                                  name: file.name,
+                                                  file: e.target.result,
+                                                  type: file.type,
+                                                  size: file.size
+                                                };
+                                                handleBulkInputChange('downloads', newDownloads);
                                               };
-                                              handleBulkInputChange('downloads', newDownloads);
-                                            };
-                                            reader.readAsDataURL(file);
-                                          }
-                                        }}
-                                        className="hidden"
-                                        id={`template-file-upload-${index}`}
-                                      />
-                                      <label
-                                        htmlFor={`template-file-upload-${index}`}
-                                        className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 cursor-pointer transition-colors"
-                                      >
-                                        Upload
+                                              reader.readAsDataURL(file);
+                                            }
+                                          }}
+                                        />
                                       </label>
                                     </div>
                                   </div>
-                                </div>
 
-                                {/* File Info Display */}
-                                {download.type && (
-                                  <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg mt-3">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <span className="text-gray-600 dark:text-gray-300">
-                                        Type: {download.type}
-                                      </span>
-                                      {download.size && (
+                                  {/* File Info Display */}
+                                  {download.type && (
+                                    <div className="bg-gray-50 dark:bg-gray-600 p-3 rounded-lg">
+                                      <div className="flex items-center justify-between text-sm">
                                         <span className="text-gray-600 dark:text-gray-300">
-                                          Size: {(download.size / 1024 / 1024).toFixed(2)} MB
+                                          Type: {download.type}
                                         </span>
-                                      )}
+                                        {download.size && (
+                                          <span className="text-gray-600 dark:text-gray-300">
+                                            Size: {(download.size / 1024 / 1024).toFixed(2)} MB
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
+                                </div>
                               </div>
                             ))}
                             
@@ -1112,27 +1168,6 @@ const VariableProductView = ({
                           </div>
                         </div>
                       )}
-
-                      {/* Additional Information */}
-                      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                          <FileText className="w-5 h-5 mr-2" />
-                          Additional Information
-                        </h4>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Variation Description
-                          </label>
-                          <textarea
-                            value={bulkData.description || ''}
-                            onChange={(e) => handleBulkInputChange('description', e.target.value)}
-                            rows={4}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                            placeholder="Describe this specific variation..."
-                          />
-                        </div>
-                      </div>
                     </div>
                   </div>
 

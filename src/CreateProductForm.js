@@ -827,11 +827,14 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
 
             {productData.variations.length > 0 && (
               <VariableProductView
+                productId={null}
                 createMode={true}
                 variations={productData.variations}
                 onVariationUpdate={updateVariation}
                 selectedVariations={selectedVariations}
                 onVariationSelectionChange={handleVariationSelectionChange}
+                showAllVariations={showAllVariations}
+                setShowAllVariations={setShowAllVariations}
               />
             )}
           </div>
