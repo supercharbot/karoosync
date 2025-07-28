@@ -429,7 +429,23 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
         stock_quantity: '',
         weight: '',
         image: null,
-        description: ''
+        description: '',
+        // Additional fields for full VariableProductView functionality
+        status: 'publish',
+        virtual: false,
+        downloadable: false,
+        downloads: [],
+        date_on_sale_from: '',
+        date_on_sale_to: '',
+        dimensions: {
+          length: '',
+          width: '',
+          height: ''
+        },
+        shipping_class: '',
+        // Additional inventory fields
+        backorders: 'no',
+        low_stock_amount: ''
       };
     });
 
@@ -447,7 +463,13 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
     }));
   };
 
-  const toggleVariationSelection = (variationId) => {
+  const toggleVariationSelection = (variationId, allSelected = null) => {
+    if (allSelected !== null) {
+      // Handle bulk selection
+      setSelectedVariations(allSelected);
+      return;
+    }
+    
     setSelectedVariations(prev => {
       const newSet = new Set(prev);
       if (newSet.has(variationId)) {
@@ -473,6 +495,10 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
     selectedVariations.forEach(variationId => {
       updateVariation(variationId, field, value);
     });
+  };
+
+  const handleVariationSelectionChange = (variationId, allSelected = null) => {
+    toggleVariationSelection(variationId, allSelected);
   };
 
   // Freeze background when modal is open
@@ -782,7 +808,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
           <div className="space-y-6">
             <div className="border-b border-gray-200 pb-4">
               <h3 className="text-xl font-semibold text-gray-900">Product Variations</h3>
-              <p className="text-sm text-gray-600 mt-1">Configure pricing and inventory for each variation</p>
+              <p className="text-sm text-gray-600 mt-1">Configure pricing, inventory, and detailed settings for each variation</p>
             </div>
 
             {productData.variations.length === 0 && (
@@ -800,248 +826,13 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
             )}
 
             {productData.variations.length > 0 && (
-              <>
-                {/* Variation Controls */}
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                    <h4 className="font-medium text-gray-900">
-                      Variations ({productData.variations.length} total, {selectedVariations.size} selected)
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={selectAllVariations}
-                        className="px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                      >
-                        Show All
-                      </button>
-                      <button
-                        onClick={deselectAllVariations}
-                        className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                      >
-                        Hide All
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Bulk Actions Dropdown */}
-                  <div className="relative mb-4">
-                    <button
-                      onClick={() => setShowBulkActions(!showBulkActions)}
-                      disabled={selectedVariations.size === 0}
-                      className="flex items-center justify-between w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <span className="font-medium text-gray-900">
-                        Bulk Actions {selectedVariations.size > 0 ? `(${selectedVariations.size} selected)` : ''}
-                      </span>
-                      <ChevronDown className={`w-4 h-4 transition-transform ${showBulkActions ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {showBulkActions && selectedVariations.size > 0 && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Set Price for Selected</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' && e.target.value) {
-                                    applyBulkToVariations('regular_price', e.target.value);
-                                    e.target.value = '';
-                                  }
-                                }}
-                              />
-                              <button
-                                onClick={(e) => {
-                                  const input = e.target.parentElement.querySelector('input');
-                                  if (input.value) {
-                                    applyBulkToVariations('regular_price', input.value);
-                                    input.value = '';
-                                  }
-                                }}
-                                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                              >
-                                Apply
-                              </button>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Set Stock for Selected</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                placeholder="Stock qty"
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' && e.target.value) {
-                                    applyBulkToVariations('stock_quantity', e.target.value);
-                                    applyBulkToVariations('manage_stock', true);
-                                    e.target.value = '';
-                                  }
-                                }}
-                              />
-                              <button
-                                onClick={(e) => {
-                                  const input = e.target.parentElement.querySelector('input');
-                                  if (input.value) {
-                                    applyBulkToVariations('stock_quantity', input.value);
-                                    applyBulkToVariations('manage_stock', true);
-                                    input.value = '';
-                                  }
-                                }}
-                                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                              >
-                                Apply
-                              </button>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Set SKU Prefix</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                placeholder="SKU-"
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' && e.target.value) {
-                                    let counter = 1;
-                                    selectedVariations.forEach(variationId => {
-                                      updateVariation(variationId, 'sku', `${e.target.value}${counter}`);
-                                      counter++;
-                                    });
-                                    e.target.value = '';
-                                  }
-                                }}
-                              />
-                              <button
-                                onClick={(e) => {
-                                  const input = e.target.parentElement.querySelector('input');
-                                  if (input.value) {
-                                    let counter = 1;
-                                    selectedVariations.forEach(variationId => {
-                                      updateVariation(variationId, 'sku', `${input.value}${counter}`);
-                                      counter++;
-                                    });
-                                    input.value = '';
-                                  }
-                                }}
-                                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                              >
-                                Apply
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Variation Selection Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {productData.variations.map((variation) => (
-                      <label key={variation.id} className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedVariations.has(variation.id)}
-                          onChange={() => toggleVariationSelection(variation.id)}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {Array.isArray(variation.attributes) 
-                              ? variation.attributes.map(attr => `${attr.name}: ${attr.option}`).join(' / ')
-                              : Object.entries(variation.attributes).map(([name, option]) => `${name}: ${option}`).join(' / ')
-                            }
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {variation.regular_price ? `$${variation.regular_price}` : 'No price set'}
-                          </p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Selected Variations Details */}
-                {selectedVariations.size > 0 && (
-                  <div className="space-y-4">
-                    <h4 className="font-medium text-gray-900">Configure Selected Variations ({selectedVariations.size})</h4>
-                    {productData.variations
-                      .filter(variation => selectedVariations.has(variation.id))
-                      .map((variation, index) => (
-                        <div key={variation.id} className="border border-gray-200 rounded-lg p-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <h5 className="font-medium text-gray-900">
-                              {Object.values(variation.attributes).join(' / ')}
-                            </h5>
-                            <button
-                              onClick={() => toggleVariationSelection(variation.id)}
-                              className="text-red-600 hover:text-red-800 p-1"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Regular Price *</label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={variation.regular_price}
-                                onChange={(e) => updateVariation(variation.id, 'regular_price', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                placeholder="0.00"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">SKU</label>
-                              <input
-                                type="text"
-                                value={variation.sku}
-                                onChange={(e) => updateVariation(variation.id, 'sku', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                placeholder="Enter SKU"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Stock Quantity</label>
-                              <input
-                                type="number"
-                                value={variation.stock_quantity}
-                                onChange={(e) => updateVariation(variation.id, 'stock_quantity', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                placeholder="0"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="mt-4">
-                            <div className="flex items-center">
-                              <input
-                                id={`manage_stock_${variation.id}`}
-                                type="checkbox"
-                                checked={variation.manage_stock}
-                                onChange={(e) => updateVariation(variation.id, 'manage_stock', e.target.checked)}
-                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                              />
-                              <label htmlFor={`manage_stock_${variation.id}`} className="ml-2 text-sm text-gray-700">
-                                Manage stock for this variation
-                              </label>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </>
+              <VariableProductView
+                createMode={true}
+                variations={productData.variations}
+                onVariationUpdate={updateVariation}
+                selectedVariations={selectedVariations}
+                onVariationSelectionChange={handleVariationSelectionChange}
+              />
             )}
           </div>
         );
