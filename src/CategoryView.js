@@ -6,6 +6,14 @@ import { loadCategoryProducts, searchProducts, deleteCategory, updateCategory, d
 import LoadingScreen from './LoadingScreen';
 import MasterModal from './MasterModal';
 
+// Function to decode HTML entities
+const decodeHtmlEntities = (text) => {
+  if (!text) return text;
+  const textArea = document.createElement('textarea');
+  textArea.innerHTML = text;
+  return textArea.value;
+};
+
 const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductSelect, onBack, onDataUpdate, parentCategoryName }) => {
   const { getAuthToken } = useAuth();
   const [products, setProducts] = useState([]);
@@ -70,7 +78,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     if (categoryKey.startsWith('category-')) {
       const categoryId = categoryKey.replace('category-', '');
       const category = userData?.metadata?.categories?.find(cat => cat.id.toString() === categoryId);
-      return category ? category.name : `Category ${categoryId}`;
+      return category ? decodeHtmlEntities(category.name) : `Category ${categoryId}`;
     }
     return categoryKey;
   };
@@ -131,7 +139,7 @@ const CategoryView = ({ userData, selectedCategory, onCategorySelect, onProductS
     const category = userData?.metadata?.categories?.find(cat => 
       cat.id === product.categories[0].id
     );
-    return category ? category.name : 'Unknown Category';
+    return category ? decodeHtmlEntities(category.name) : 'Unknown Category';
   };
 
   const handleProductClick = (product) => {
@@ -372,7 +380,7 @@ const handleArchiveProduct = async (product, e) => {
                     onClick={() => onCategorySelect(category.isUncategorized ? { name: 'Uncategorized', key: 'uncategorized' } : { name: category.name, key: `category-${category.id}` })}
                     className="flex-1 cursor-pointer"
                   >
-                    <h3 className="font-medium text-gray-900 dark:text-gray-100">{category.name}</h3>
+                    <h3 className="font-medium text-gray-900 dark:text-gray-100">{decodeHtmlEntities(category.name)}</h3>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                       {category.isUncategorized ? 'Products without categories' : `${category.productCount || category.count || 0} products`}
                     </span>
@@ -489,7 +497,7 @@ const handleArchiveProduct = async (product, e) => {
           </button>
           <div>
             <h2 className="text-xl lg:text-2xl font-semibold text-gray-800 dark:text-gray-200">
-              {selectedCategory.name}
+              {decodeHtmlEntities(selectedCategory.name)}
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               {(searchTerm ? searchResults : displayData).length} items
@@ -578,7 +586,7 @@ const handleArchiveProduct = async (product, e) => {
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-gray-900 dark:text-gray-100 truncate">{childCategory.name}</h4>
+                    <h4 className="font-medium text-gray-900 dark:text-gray-100 truncate">{decodeHtmlEntities(childCategory.name)}</h4>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{childCategory.productCount || 0} products</p>
                   </div>
                 </div>

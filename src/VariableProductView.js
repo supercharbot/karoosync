@@ -489,45 +489,6 @@ const VariableProductView = ({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100">
-                Product Variations
-              </h1>
-              <span className="ml-2 md:ml-3 bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 px-1.5 py-0.5 md:px-2 md:py-1 rounded-full text-xs md:text-sm">
-                {variations.length} variations
-              </span>
-            </div>
-            <div className="flex items-center space-x-2 md:space-x-4">
-              {saveStatus && (
-                <span className={`text-xs md:text-sm px-2 md:px-3 py-1 rounded-full ${
-                  saveStatus.includes('Error') 
-                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' 
-                    : saveStatus.includes('Saving')
-                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                    : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
-                }`}>
-                  {saveStatus}
-                </span>
-              )}
-              {!createMode && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-2 py-1.5 md:px-4 md:py-2 rounded-lg font-medium transition-colors flex items-center space-x-1 md:space-x-2 text-sm md:text-base"
-                >
-                  <Save className="w-3 h-3 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">Save All Changes</span>
-                  <span className="sm:hidden">Save</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -580,19 +541,6 @@ const VariableProductView = ({
                       </div>
                     </div>
                   )}
-
-                  {/* Template Variation Header */}
-                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700 p-4 mb-6">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center">
-                        <Package2 className="w-5 h-5 mr-2" />
-                        Template Variation
-                      </h4>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Configure once, apply to all
-                      </div>
-                    </div>
-                  </div>
 
                   {/* PASTE THE EXACT VARIATION CODE HERE - from your paste.txt file */}
                   <div className="mt-6 space-y-6">

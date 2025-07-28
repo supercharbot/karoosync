@@ -919,15 +919,71 @@ async function createVariableProduct(baseUrl, auth, productData) {
     const parentProduct = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {}, 'POST', parentData);
     console.log(`✅ Created parent variable product: ${parentProduct.id}`);
     
-    // Step 2: Generate variations if attributes exist
+    // Step 2: Create variations using the configured data from frontend
     let createdVariations = [];
-    if (productData.attributes && productData.attributes.length > 0) {
+    if (productData.variations && productData.variations.length > 0) {
+        console.log(`🔄 Creating ${productData.variations.length} configured variations...`);
+        
+        // Create variations in batches
+        const BATCH_SIZE = 10;
+        for (let i = 0; i < productData.variations.length; i += BATCH_SIZE) {
+            const batch = productData.variations.slice(i, i + BATCH_SIZE);
+            
+            for (const variation of batch) {
+                try {
+                    // Clean up the variation data for WooCommerce API
+                    const variationData = {
+                        regular_price: variation.regular_price || '',
+                        sale_price: variation.sale_price || '',
+                        sku: variation.sku || '',
+                        stock_status: variation.stock_status || 'instock',
+                        manage_stock: variation.manage_stock || false,
+                        stock_quantity: variation.stock_quantity ? parseInt(variation.stock_quantity) : null,
+                        weight: variation.weight || '',
+                        dimensions: variation.dimensions || { length: '', width: '', height: '' },
+                        image: variation.image || null,
+                        description: variation.description || '',
+                        attributes: variation.attributes || [],
+                        status: variation.status || 'publish',
+                        virtual: variation.virtual || false,
+                        downloadable: variation.downloadable || false,
+                        downloads: variation.downloads || [],
+                        date_on_sale_from: variation.date_on_sale_from || '',
+                        date_on_sale_to: variation.date_on_sale_to || '',
+                        shipping_class: variation.shipping_class || '',
+                        backorders: variation.backorders || 'no',
+                        low_stock_amount: variation.low_stock_amount || null
+                    };
+                    
+                    // Remove temporary ID and other frontend-only fields
+                    delete variationData.id;
+                    
+                    const createdVariation = await makeWordPressRequest(
+                        baseUrl,
+                        `/wp-json/wc/v3/products/${parentProduct.id}/variations`,
+                        auth,
+                        {},
+                        'POST',
+                        variationData
+                    );
+                    createdVariations.push(createdVariation);
+                    console.log(`✅ Created variation ${createdVariations.length}/${productData.variations.length}`);
+                } catch (error) {
+                    console.error(`❌ Failed to create variation:`, error);
+                }
+            }
+            
+            if (i + BATCH_SIZE < productData.variations.length) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+    } else if (productData.attributes && productData.attributes.length > 0) {
+        // Fallback: auto-generate basic variations if no configured variations provided
         const generatedVariations = generateVariationsFromAttributes(productData.attributes);
         
         if (generatedVariations.length > 0) {
-            console.log(`🔄 Creating ${generatedVariations.length} variations...`);
+            console.log(`🔄 Auto-generating ${generatedVariations.length} basic variations...`);
             
-            // Create variations in batches
             const BATCH_SIZE = 10;
             for (let i = 0; i < generatedVariations.length; i += BATCH_SIZE) {
                 const batch = generatedVariations.slice(i, i + BATCH_SIZE);
@@ -1676,6 +1732,9 @@ export async function handleProduct(event, userId) {
             
             // Remove from S3 cache
             await removeProductFromS3(userId, productId);
+            
+            // Update category metadata after product deletion
+            await updateMetadataAfterCategoryChange(userId);
             
             return {
                 statusCode: 200,

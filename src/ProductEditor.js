@@ -4,6 +4,14 @@ import ProductView from './ProductView';
 import ParentProduct from './ParentProduct'; // CHANGED: VariableProductView → ParentProduct
 import { ChevronRight, Home } from 'lucide-react';
 
+// Function to decode HTML entities
+const decodeHtmlEntities = (text) => {
+  if (!text) return text;
+  const textArea = document.createElement('textarea');
+  textArea.innerHTML = text;
+  return textArea.value;
+};
+
 const ProductEditor = ({ userData, onReset }) => {
   const [currentView, setCurrentView] = useState('categories');
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -55,16 +63,16 @@ const ProductEditor = ({ userData, onReset }) => {
 
   const getParentCategoryName = () => {
     if (categoryPath.length > 0) {
-      return categoryPath[categoryPath.length - 1].name;
+      return decodeHtmlEntities(categoryPath[categoryPath.length - 1].name);
     }
     return 'Categories';
   };
 
   const getBreadcrumbPath = () => {
     const path = ['Categories'];
-    categoryPath.forEach(cat => path.push(cat.name));
-    if (selectedCategory) path.push(selectedCategory.name);
-    if (selectedProduct) path.push(selectedProduct.name);
+    categoryPath.forEach(cat => path.push(decodeHtmlEntities(cat.name)));
+    if (selectedCategory) path.push(decodeHtmlEntities(selectedCategory.name));
+    if (selectedProduct) path.push(decodeHtmlEntities(selectedProduct.name));
     return path;
   };
 
