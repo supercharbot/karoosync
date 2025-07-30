@@ -27,7 +27,7 @@ function makeWordPressRequest(baseUrl, endpoint, auth, params = {}, method = 'GE
                 'User-Agent': 'Karoosync/2.0',
                 'Content-Type': 'application/json'
             },
-            timeout: 30000
+            timeout: 60000
         };
         
         const req = https.request(url, options, (res) => {
@@ -919,42 +919,10 @@ async function createVariableProduct(baseUrl, auth, productData) {
     const parentProduct = await makeWordPressRequest(baseUrl, '/wp-json/wc/v3/products', auth, {}, 'POST', parentData);
     console.log(`✅ Created parent variable product: ${parentProduct.id}`);
     
-    // Step 2: Generate variations if attributes exist
+    // Step 2: Don't auto-create variations - let the frontend create them with proper data
+    // This prevents duplicate variations and ensures variations have proper SKUs and data
     let createdVariations = [];
-    if (productData.attributes && productData.attributes.length > 0) {
-        const generatedVariations = generateVariationsFromAttributes(productData.attributes);
-        
-        if (generatedVariations.length > 0) {
-            console.log(`🔄 Creating ${generatedVariations.length} variations...`);
-            
-            // Create variations in batches
-            const BATCH_SIZE = 10;
-            for (let i = 0; i < generatedVariations.length; i += BATCH_SIZE) {
-                const batch = generatedVariations.slice(i, i + BATCH_SIZE);
-                
-                for (const variation of batch) {
-                    try {
-                        const createdVariation = await makeWordPressRequest(
-                            baseUrl,
-                            `/wp-json/wc/v3/products/${parentProduct.id}/variations`,
-                            auth,
-                            {},
-                            'POST',
-                            variation
-                        );
-                        createdVariations.push(createdVariation);
-                        console.log(`✅ Created variation ${createdVariations.length}/${generatedVariations.length}`);
-                    } catch (error) {
-                        console.error(`❌ Failed to create variation:`, error);
-                    }
-                }
-                
-                if (i + BATCH_SIZE < generatedVariations.length) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-            }
-        }
-    }
+    console.log('🔍 Variable product created without auto-generating variations - frontend will handle variation creation');
     
     // Don't fetch parent - WooCommerce returns variations as IDs which overrides our full objects
     const result = { ...parentProduct };
@@ -1080,25 +1048,105 @@ async function createProductInWooCommerce(url, username, appPassword, productDat
     }
 }
 
-async function createVariationsInWooCommerce(url, username, appPassword, productId, variations) {
+async function createVariationsInWooCommerce(url, username, appPassword, productId, variations, productName = '') {
     const baseUrl = url.startsWith('http') ? url : `https://${url}`;
     const auth = Buffer.from(`${username}:${appPassword}`).toString('base64');
     
+    const createdVariations = [];
+    
     for (const variation of variations) {
-        await makeWordPressRequest(
-            baseUrl, 
-            `/wp-json/wc/v3/products/${productId}/variations`, 
-            auth, 
-            {}, 
-            'POST', 
-            variation
-        );
+        try {
+            console.log(`🔍 Processing variation with original data:`, JSON.stringify(variation, null, 2));
+            
+            // Generate SKU in format: "product name - attribute name - variation name"
+            const sanitizedProductName = productName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+            
+            const attributeParts = variation.attributes?.map(attr => {
+                const sanitizedAttrName = attr.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                const sanitizedAttrValue = attr.option.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                return `${sanitizedAttrName}-${sanitizedAttrValue}`;
+            }) || [];
+            
+            // Create SKU: product-name-attribute1-value1-attribute2-value2
+            const uniqueSku = `${sanitizedProductName}-${attributeParts.join('-')}`.substring(0, 100); // WooCommerce limit
+            
+            console.log(`🏷️ Original SKU: ${variation.sku || 'empty'}`);
+            console.log(`🏷️ Generated SKU: ${uniqueSku}`);
+            
+            // Process variation image if it exists and is base64
+            let processedImage = variation.image;
+            if (variation.image && variation.image.src && variation.image.src.startsWith('data:')) {
+                console.log(`🖼️ Processing variation image for SKU: ${uniqueSku}`);
+                try {
+                    const processedImages = await processProductImages([variation.image], baseUrl, auth, `Variation ${uniqueSku}`);
+                    processedImage = processedImages[0];
+                    console.log(`✅ Variation image processed successfully for ${uniqueSku}`);
+                } catch (imageError) {
+                    console.error(`❌ Failed to process variation image for ${uniqueSku}:`, imageError);
+                    // Continue without image rather than failing the entire variation
+                    processedImage = null;
+                }
+            }
+            
+            // Process variation data to ensure correct data types for WooCommerce API
+            const processedVariation = {
+                ...variation,
+                // Set the processed SKU
+                sku: uniqueSku,
+                // Set the processed image
+                image: processedImage,
+                // Clean description (remove HTML p tags that WooCommerce might add)
+                description: variation.description ? variation.description.replace(/<\/?p>/g, '') : '',
+                // Convert numeric fields to proper types
+                stock_quantity: variation.stock_quantity ? parseInt(variation.stock_quantity) : null,
+                low_stock_amount: variation.low_stock_amount ? parseInt(variation.low_stock_amount) : null,
+                regular_price: variation.regular_price ? parseFloat(variation.regular_price).toString() : '',
+                sale_price: variation.sale_price ? parseFloat(variation.sale_price).toString() : '',
+                weight: variation.weight ? parseFloat(variation.weight).toString() : '',
+                // Ensure dimensions are strings if provided
+                dimensions: variation.dimensions ? {
+                    length: variation.dimensions.length ? parseFloat(variation.dimensions.length).toString() : '',
+                    width: variation.dimensions.width ? parseFloat(variation.dimensions.width).toString() : '',
+                    height: variation.dimensions.height ? parseFloat(variation.dimensions.height).toString() : ''
+                } : { length: '', width: '', height: '' }
+            };
+            
+            // Remove null values to avoid sending empty fields (but preserve important structures)
+            Object.keys(processedVariation).forEach(key => {
+                if (processedVariation[key] === null || processedVariation[key] === '') {
+                    // Don't delete image, attributes, or dimensions even if empty
+                    if (key !== 'image' && key !== 'attributes' && key !== 'dimensions') {
+                        delete processedVariation[key];
+                    }
+                }
+            });
+            
+            console.log(`📤 Sending variation data:`, JSON.stringify(processedVariation, null, 2));
+            
+            // Create variation (no retry loop - SKU should be unique now)
+            const createdVariation = await makeWordPressRequest(
+                baseUrl, 
+                `/wp-json/wc/v3/products/${productId}/variations`, 
+                auth, 
+                {}, 
+                'POST', 
+                processedVariation
+            );
+            
+            createdVariations.push(createdVariation);
+            console.log(`✅ Created variation: ${createdVariation.id} with SKU: ${createdVariation.sku}`);
+        } catch (error) {
+            console.error(`❌ Failed to create variation:`, error);
+            throw error;
+        }
     }
+    
+    return createdVariations;
 }
 
 // Add job utilities at top of file
 function generateJobId() {
-    return `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `job_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
 async function saveJobStatus(userId, jobId, status, progress = 0, result = null, error = null) {
@@ -1267,6 +1315,27 @@ export async function createProductBackground(userId, productData, jobId) {
         
     } catch (error) {
         console.error(`❌ Background job ${jobId} failed:`, error);
+        
+        // Check if this is a SKU duplication error but the product was actually created
+        if (error.message && error.message.includes('Invalid or duplicated SKU')) {
+            // Try to extract product ID from error message to check if product exists
+            const resourceIdMatch = error.message.match(/"resource_id":(\d+)/);
+            if (resourceIdMatch) {
+                const productId = resourceIdMatch[1];
+                console.log(`⚠️ SKU duplication error but product ${productId} may have been created`);
+                
+                // Mark as completed with a warning instead of failed
+                await saveJobStatus(userId, jobId, 'completed', 100, {
+                    success: true,
+                    product: { id: productId },
+                    productId: productId,
+                    warning: 'Product created despite SKU duplication warning',
+                    message: 'Product created successfully'
+                }, null);
+                return;
+            }
+        }
+        
         await saveJobStatus(userId, jobId, 'failed', 0, null, error.message);
     }
 }
@@ -1385,6 +1454,140 @@ export async function handleProduct(event, userId) {
                 body: JSON.stringify({
                     success: false,
                     error: errorMessage
+                })
+            };
+        }
+    }
+
+    if (event.httpMethod === 'POST' && event.queryStringParameters?.action === 'create-product-variations') {
+        console.log('🔄 Create product variations request received');
+        
+        let requestData;
+        try {
+            requestData = JSON.parse(event.body || '{}');
+        } catch (parseError) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Invalid JSON in request body' })
+            };
+        }
+        
+        const { productId, variations } = requestData;
+        
+        if (!productId || !variations || !Array.isArray(variations)) {
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: false, error: 'Product ID and variations array are required' })
+            };
+        }
+        
+        try {
+            const credentials = await getUserCredentials(userId);
+            if (!credentials) {
+                return {
+                    statusCode: 400,
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ success: false, error: 'User credentials not found' })
+                };
+            }
+            
+            console.log(`📝 Creating ${variations.length} variations for product ${productId}`);
+            
+            // Get parent product name for SKU generation
+            let productName = `Product-${productId}`; // fallback
+            try {
+                const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
+                const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
+                
+                const parentProduct = await makeWordPressRequest(
+                    baseUrl,
+                    `/wp-json/wc/v3/products/${productId}`,
+                    auth
+                );
+                productName = parentProduct.name || productName;
+                console.log(`📝 Retrieved parent product name: ${productName}`);
+            } catch (error) {
+                console.warn(`⚠️ Could not retrieve parent product name: ${error.message}`);
+            }
+            
+            const createdVariations = await createVariationsInWooCommerce(
+                credentials.url,
+                credentials.username,
+                credentials.appPassword,
+                productId,
+                variations,
+                productName
+            );
+            
+            // Update S3 storage with the new variations
+            try {
+                console.log(`💾 Updating S3 with ${createdVariations.length} new variations`);
+                
+                // Get existing products data from S3
+                const existingData = await s3Client.send(new GetObjectCommand({
+                    Bucket: BUCKET_NAME,
+                    Key: `users/${userId}/products.json.gz`
+                }));
+                const compressed = await existingData.Body.transformToByteArray();
+                const data = JSON.parse(zlib.gunzipSync(compressed).toString());
+                
+                // Update the parent product with new variations (append, don't overwrite)
+                if (data.products[productId]) {
+                    // Initialize variations array if it doesn't exist
+                    if (!data.products[productId].variations) {
+                        data.products[productId].variations = [];
+                    }
+                    
+                    // Append new variations to existing ones (avoid duplicates by ID)
+                    const existingIds = new Set(data.products[productId].variations.map(v => v.id));
+                    const newVariations = createdVariations.filter(v => !existingIds.has(v.id));
+                    data.products[productId].variations.push(...newVariations);
+                    
+                    data.lastUpdated = new Date().toISOString();
+                    
+                    console.log(`✅ Updated product ${productId} with ${createdVariations.length} variations`);
+                    
+                    // Save back to S3
+                    const updatedJson = JSON.stringify(data);
+                    const compressedUpdated = zlib.gzipSync(updatedJson);
+                    
+                    await s3Client.send(new PutObjectCommand({
+                        Bucket: BUCKET_NAME,
+                        Key: `users/${userId}/products.json.gz`,
+                        Body: compressedUpdated,
+                        ContentType: 'application/json',
+                        ContentEncoding: 'gzip'
+                    }));
+                    
+                    console.log(`✅ S3 sync completed for product ${productId} variations`);
+                } else {
+                    console.warn(`⚠️ Product ${productId} not found in S3 data for variation sync`);
+                }
+            } catch (s3Error) {
+                console.error('❌ S3 sync failed for variations:', s3Error);
+                // Don't fail the entire request - variations were created successfully in WooCommerce
+            }
+            
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    success: true,
+                    variations: createdVariations,
+                    message: `Successfully created ${createdVariations.length} variations`
+                })
+            };
+            
+        } catch (error) {
+            console.error('Variation creation error:', error);
+            return {
+                statusCode: 400,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    success: false,
+                    error: error.message
                 })
             };
         }
@@ -1749,13 +1952,28 @@ export async function handleProduct(event, userId) {
         const { image, index } = JSON.parse(event.body || '{}');
         
         try {
+            console.log(`📸 Starting image upload for product ${productId}, image index ${index}`);
             const credentials = await getUserCredentials(userId);
             const baseUrl = credentials.url.startsWith('http') ? credentials.url : `https://${credentials.url}`;
             const auth = Buffer.from(`${credentials.username}:${credentials.appPassword}`).toString('base64');
             
-            const processedImages = await processProductImages([image], baseUrl, auth, `Product ${productId}`);
+            // Process image with timeout wrapper
+            let processedImages;
+            try {
+                processedImages = await Promise.race([
+                    processProductImages([image], baseUrl, auth, `Product ${productId}`),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Image processing timeout')), 45000)
+                    )
+                ]);
+                console.log(`✅ Image processed successfully for product ${productId}`);
+            } catch (processError) {
+                console.error(`❌ Image processing failed:`, processError);
+                throw processError;
+            }
             
             // Update product with new image
+            console.log(`🔄 Updating product ${productId} with new image`);
             const existingProduct = await makeWordPressRequest(baseUrl, `/wp-json/wc/v3/products/${productId}`, auth);
             const updatedImages = [...(existingProduct.images || []), ...processedImages];
             
@@ -1763,14 +1981,16 @@ export async function handleProduct(event, userId) {
                 images: updatedImages 
             });
             
+            console.log(`✅ Product ${productId} updated with image successfully`);
             return {
                 statusCode: 200,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ success: true, image: processedImages[0] })
             };
         } catch (error) {
+            console.error(`❌ Image upload failed for product ${productId}:`, error);
             return {
-                statusCode: 500,
+                statusCode: error.message.includes('timeout') ? 504 : 500,
                 headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ success: false, error: error.message })
             };

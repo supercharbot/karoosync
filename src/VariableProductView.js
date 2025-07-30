@@ -49,7 +49,9 @@ const VariableProductView = ({
   const [expandedVariation, setExpandedVariation] = useState(null);
   const [shippingClasses, setShippingClasses] = useState([]);
   const [showBulkActions, setShowBulkActions] = useState(false);
-  const [bulkData, setBulkData] = useState({
+  
+  // Define initial bulk data state to prevent field loss during resets
+  const initialBulkData = {
     sku: '',
     regular_price: '',
     sale_price: '',
@@ -73,7 +75,9 @@ const VariableProductView = ({
     description: '',
     image: null,
     downloads: []
-  });
+  };
+
+  const [bulkData, setBulkData] = useState(initialBulkData);
   const [bulkFeedback, setBulkFeedback] = useState('');
   const [changedVariations, setChangedVariations] = useState(new Set());
 
@@ -372,19 +376,8 @@ const VariableProductView = ({
         setBulkFeedback(`Applied ${appliedChanges.join(', ')} to all variations`);
         setTimeout(() => setBulkFeedback(''), 3000);
         
-        // Clear all bulk data
-        setBulkData({
-          regular_price: '',
-          sale_price: '',
-          date_on_sale_from: '',
-          date_on_sale_to: '',
-          stock_status: '',
-          manage_stock: false,
-          stock_quantity: '',
-          weight: '',
-          shipping_class: '',
-          status: ''
-        });
+        // Clear all bulk data - reset to initial state to prevent field loss
+        setBulkData(initialBulkData);
       }
     }
   };
@@ -737,22 +730,24 @@ const VariableProductView = ({
                           Basic Information
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {/* SKU */}
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              SKU
-                            </label>
-                            <div className="relative">
-                              <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                              <input
-                                type="text"
-                                value={bulkData.sku || ''}
-                                onChange={(e) => handleBulkInputChange('sku', e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                placeholder="variation-sku"
-                              />
+                          {/* SKU - Hidden in create mode */}
+                          {!createMode && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                SKU
+                              </label>
+                              <div className="relative">
+                                <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                  type="text"
+                                  value={bulkData.sku || ''}
+                                  onChange={(e) => handleBulkInputChange('sku', e.target.value)}
+                                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                  placeholder="variation-sku"
+                                />
+                              </div>
                             </div>
-                          </div>
+                          )}
 
                           {/* Regular Price */}
                           <div>
@@ -1422,22 +1417,24 @@ const VariableProductView = ({
                             Basic Information
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {/* SKU */}
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                SKU
-                              </label>
-                              <div className="relative">
-                                <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <input
-                                  type="text"
-                                  value={variation.sku || ''}
-                                  onChange={(e) => handleVariationChange(variation.id, 'sku', e.target.value)}
-                                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                                  placeholder="variation-sku"
-                                />
+                            {/* SKU - Hidden in create mode */}
+                            {!createMode && (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                  SKU
+                                </label>
+                                <div className="relative">
+                                  <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                  <input
+                                    type="text"
+                                    value={variation.sku || ''}
+                                    onChange={(e) => handleVariationChange(variation.id, 'sku', e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                    placeholder="variation-sku"
+                                  />
+                                </div>
                               </div>
-                            </div>
+                            )}
 
                             {/* Regular Price */}
                             <div>

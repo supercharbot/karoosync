@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, ArrowLeft, ArrowRight, Save, Upload, Image, Package, AlertCircle, Check, ChevronDown } from 'lucide-react';
 import BasicSettings from './BasicSettings';
 import AdvancedSettings from './AdvancedSettings';
-import { createProduct, loadWooCommerceAttributes, pollJobUntilComplete, uploadProductImages } from './api';
+import { createProduct, loadWooCommerceAttributes, pollJobUntilComplete, uploadProductImages, createProductVariations } from './api';
 import { useAuth } from './AuthContext';
 import VariableProductView from './VariableProductView';
 
@@ -332,12 +332,20 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
       
       const authToken = await getAuthToken();
       
-      // Extract images and create product without them
+      // Extract images and variations from product data
       const images = productData.images || [];
-      const productDataWithoutImages = { ...productData, images: [] };
+      const variations = productData.variations || [];
+      const isVariableProduct = productData.type === 'variable' && variations.length > 0;
+      
+      // Create product without images and variations first
+      const productDataForCreation = { 
+        ...productData, 
+        images: [],
+        variations: [] // Always send empty variations array initially
+      };
       
       // Start async product creation
-      const jobResult = await createProduct(productDataWithoutImages, authToken);
+      const jobResult = await createProduct(productDataForCreation, authToken);
       
       if (!jobResult.success) {
         throw new Error(jobResult.error || 'Failed to start product creation');
@@ -354,13 +362,65 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
       
       if (result.success) {
         const createdProduct = result.result.product;
+        console.log('✅ Product created:', createdProduct.id);
         
-        // Upload images if any exist
+        // Step 2: Create variations if this is a variable product
+        if (isVariableProduct) {
+          setSubmitStatus('Creating product variations...');
+          try {
+            // Filter variations to only include selected ones
+            const selectedVariationsList = variations.filter(variation => 
+              selectedVariations.has(variation.id)
+            );
+            
+            console.log(`🔍 Creating ${selectedVariationsList.length} selected variations out of ${variations.length} total variations`);
+            
+            const variationResult = await createProductVariations(
+              createdProduct.id, 
+              selectedVariationsList, 
+              authToken,
+              (progress) => {
+                setSubmitStatus(`Creating variations... ${progress}%`);
+              }
+            );
+            
+            if (!variationResult.success) {
+              console.warn('⚠️ Variation creation failed:', variationResult.error);
+              setSubmitStatus(`Product created, but variation creation failed: ${variationResult.error}`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } else {
+              console.log('✅ Variations created successfully');
+              // Update the created product with variations data
+              createdProduct.variations = variationResult.variations || [];
+            }
+          } catch (variationError) {
+            console.error('❌ Variation creation failed:', variationError);
+            setSubmitStatus(`Product created, but variation creation failed: ${variationError.message}`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+        
+        // Step 3: Upload images if any exist
         if (images.length > 0) {
           setSubmitStatus(`Uploading ${images.length} images...`);
-          await uploadProductImages(createdProduct.id, images, authToken, (progress) => {
-            setSubmitStatus(`Uploading images... ${progress}%`);
-          });
+          try {
+            const uploadResult = await uploadProductImages(createdProduct.id, images, authToken, (progress) => {
+              setSubmitStatus(`Uploading images... ${progress}%`);
+            });
+            
+            // Handle partial success
+            if (uploadResult && uploadResult.partialSuccess) {
+              console.warn('⚠️ Partial image upload success:', uploadResult.message);
+              setSubmitStatus(`Product created! ${uploadResult.message}`);
+              // Still proceed to close the form - product was created successfully
+            }
+          } catch (imageError) {
+            console.error('❌ Image upload failed:', imageError);
+            // Don't fail the entire product creation - just show a warning
+            setSubmitStatus(`Product created successfully, but image upload failed: ${imageError.message}`);
+            // Add a brief delay so user can see the message
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
         }
         
         onProductCreated(createdProduct);
@@ -423,7 +483,7 @@ const CreateProductForm = ({ isOpen, onClose, onProductCreated, selectedCategory
         attributes: attributes,
         regular_price: '',
         sale_price: '',
-        sku: '',
+        // SKU will be auto-generated in backend based on product name + attributes
         stock_status: 'instock',
         manage_stock: false,
         stock_quantity: '',
