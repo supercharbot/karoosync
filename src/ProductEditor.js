@@ -26,6 +26,9 @@ const ProductEditor = ({ userData, onReset }) => {
     setCategoryPath(newPath);
     setSelectedCategory(category);
     setCurrentView('products');
+    
+    // Reset scroll position to top
+    window.scrollTo(0, 0);
   };
 
   const handleProductSelect = (product) => {
@@ -36,6 +39,9 @@ const ProductEditor = ({ userData, onReset }) => {
     } else {
       setCurrentView('product-edit');
     }
+    
+    // Reset scroll position to top
+    window.scrollTo(0, 0);
   };
 
   const handleBackToCategories = () => {
@@ -50,11 +56,17 @@ const ProductEditor = ({ userData, onReset }) => {
       setCategoryPath([]);
       setCurrentView('categories');
     }
+    
+    // Reset scroll position to top
+    window.scrollTo(0, 0);
   };
 
   const handleBackToProducts = () => {
     setSelectedProduct(null);
     setCurrentView('products');
+    
+    // Reset scroll position to top
+    window.scrollTo(0, 0);
   };
 
   const handleDataUpdate = () => {
@@ -99,6 +111,9 @@ const ProductEditor = ({ userData, onReset }) => {
         setCurrentView('products');
       }
     }
+    
+    // Reset scroll position to top
+    window.scrollTo(0, 0);
   };
 
   return (
